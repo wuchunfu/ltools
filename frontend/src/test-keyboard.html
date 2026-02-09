@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>键盘事件测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .event-log {
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 20px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .log-escape {
+            color: red;
+            font-weight: bold;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            background: #007AFF;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0051D5;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🔑 键盘事件测试页面</h1>
+        <p>这个页面用于测试键盘事件是否能够被正确捕获。</p>
+
+        <div>
+            <button onclick="requestFocus()">请求焦点</button>
+            <button onclick="clearLog()">清空日志</button>
+        </div>
+
+        <div class="event-log" id="eventLog">
+            <div class="log-entry">等待键盘事件...</div>
+        </div>
+
+        <div style="margin-top: 20px;">
+            <h3>测试说明：</h3>
+            <ul>
+                <li>按任意键查看事件日志</li>
+                <li>按 ESC 键应该显示红色高亮</li>
+                <li>点击"请求焦点"按钮确保页面获得焦点</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const eventLog = document.getElementById('eventLog');
+        let eventCount = 0;
+
+        function addLog(message, isEscape = false) {
+            eventCount++;
+            const entry = document.createElement('div');
+            entry.className = 'log-entry' + (isEscape ? ' log-escape' : '');
+            entry.textContent = `${eventCount}. ${new Date().toLocaleTimeString()} - ${message}`;
+            eventLog.appendChild(entry);
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+
+        function clearLog() {
+            eventLog.innerHTML = '<div class="log-entry">日志已清空</div>';
+            eventCount = 0;
+        }
+
+        function requestFocus() {
+            window.focus();
+            addLog('已请求窗口焦点');
+        }
+
+        // 测试不同的事件监听方式
+        document.addEventListener('DOMContentLoaded', () => {
+            addLog('页面加载完成');
+
+            // 方式1: 普通模式
+            window.addEventListener('keydown', (e) => {
+                addLog(`[普通模式] 按键: ${e.key}, 代码: ${e.code}`, e.key === 'Escape');
+            });
+
+            // 方式2: 捕获模式
+            window.addEventListener('keydown', (e) => {
+                addLog(`[捕获模式] 按键: ${e.key}, 代码: ${e.code}`, e.key === 'Escape');
+            }, { capture: true });
+
+            // 方式3: 文档级别
+            document.addEventListener('keydown', (e) => {
+                addLog(`[文档级别] 按键: ${e.key}, 代码: ${e.code}`, e.key === 'Escape');
+            });
+
+            // 请求焦点
+            window.focus();
+            addLog('已自动请求窗口焦点');
+
+            // 添加点击事件来请求焦点
+            document.addEventListener('click', () => {
+                window.focus();
+                addLog('点击时请求焦点');
+            });
+        });
+
+        // 防止页面缓存
+        window.addEventListener('load', () => {
+            addLog('窗口完全加载');
+        });
+    </script>
+</body>
+</html>

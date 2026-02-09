@@ -1,0 +1,55 @@
+# Wails v3 配置文件
+name: LTools
+outputFileName: ltools
+outputType: desktop
+
+# 前端构建配置
+frontend:
+  install: npm install
+  build: npm run build
+  dev:watch: npm run dev
+  dev:server: npm run dev
+  port: 9245
+
+# 应用信息
+author:
+  name: LTools Team
+  email: contact@ltools.dev
+
+# 应用详细信息
+info:
+  companyName: LTools
+  productName: LTools
+  productVersion: 1.0.0
+  copyright: Copyright © 2024 LTools Team. All rights reserved.
+  description: |
+    LTools 是一款基于 Wails v3 和 React 构建的插件式桌面工具箱。
+    提供日期时间、计算器、剪贴板、系统信息、JSON 编辑器、进程管理、截图工具等多种实用功能，
+    支持通过插件扩展功能，打造个性化的桌面工具集。
+  comments: 插件式桌面工具箱 - 跨平台桌面应用
+  fileVersion: 1.0.0.0
+  originalFilename: ltools
+
+# 支持的平台
+platform:
+  - darwin
+  - linux
+  - windows
+
+# macOS 特定配置
+macOS:
+  bundleShortVersion: "1.0.0"
+  bundleVersion: "1"
+  category: public.app-category.utilities
+  className: com.ltools.app
+  entitlements:
+    com.apple.security.cs.allow-unsigned-executable-memory: true
+    com.apple.security.network.client: true
+  infoPlist:
+    CFBundleName: LTools
+    CFBundleDisplayName: LTools
+    NSHumanReadableCopyright: Copyright © 2024 LTools Team
+    LSMinimumSystemVersion: "10.13.0"
+    NSHighResolutionCapable: true
+    NSAppTransportSecurity:
+      NSAllowsArbitraryLoads: true

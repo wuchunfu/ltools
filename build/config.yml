@@ -1,0 +1,75 @@
+# 此文件包含该项目的配置。
+# 当你更新 `info` 或 `fileAssociations` 时，运行 `wails3 task common:update:build-assets` 来更新资源文件。
+# 注意：这将覆盖你对资源文件所做的任何更改。
+version: '3'
+
+# 此信息用于生成构建资源。
+info:
+  companyName: "LTools" # 公司名称
+  productName: "LTools" # 应用程序名称
+  productIdentifier: "com.ltools.app" # 唯一的产品标识符
+  description: "多功能开发工具集" # 应用程序描述
+  copyright: "(c) 2025, LTools" # 版权文本
+  comments: "开发者效率工具" # 备注
+  version: "0.1.0" # 应用程序版本
+
+# iOS 构建配置（取消注释以自定义 iOS 项目生成）
+# 注意：`ios` 下的键在设置时会覆盖 `info` 下的值。
+# ios:
+#   # 生成的 Xcode 项目中使用的 iOS bundle 标识符 (CFBundleIdentifier)
+#   bundleID: "com.mycompany.myproduct"
+#   # 应用图标下方显示的名称 (CFBundleDisplayName/CFBundleName)
+#   displayName: "My Product"
+#   # 嵌入到 Info.plist 中的应用版本 (CFBundleShortVersionString/CFBundleVersion)
+#   version: "0.0.1"
+#   # 用于模板和项目设置的公司/组织名称
+#   company: "My Company"
+#   # 嵌入到 Info.plist 元数据中的附加注释
+#   comments: "Some Product Comments"
+
+# 开发模式配置
+dev_mode:
+  root_path: .
+  log_level: warn
+  debounce: 1000
+  ignore:
+    dir:
+      - .git
+      - node_modules
+      - frontend
+      - bin
+    file:
+      - .DS_Store
+      - .gitignore
+      - .gitkeep
+    watched_extension:
+      - "*.go"
+      - "*.js" # 监听使用 //wails:include 指令包含的 JS/TS 文件的更改。
+      - "*.ts" # frontend 目录将通过上述设置被完全排除。
+    git_ignore: true
+  executes:
+    - cmd: wails3 build DEV=true
+      type: blocking
+    - cmd: wails3 task common:dev:frontend
+      type: background
+    - cmd: wails3 task run
+      type: primary
+
+# 文件关联
+# 更多信息请访问：https://v3.wails.io/noit/done/yet
+fileAssociations:
+#  - ext: wails
+#    name: Wails
+#    description: Wails 应用程序文件
+#    iconName: wailsFileIcon
+#    role: Editor
+#  - ext: jpg
+#    name: JPEG
+#    description: 图像文件
+#    iconName: jpegFileIcon
+#    role: Editor
+#    mimeType: image/jpeg  # （可选）
+
+# 其他数据
+other:
+  - name: My Other Data

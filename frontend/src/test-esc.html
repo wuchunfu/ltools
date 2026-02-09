@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESC 键测试 - 独立窗口</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .test-container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        .status {
+            font-size: 24px;
+            margin: 20px 0;
+        }
+        .success {
+            color: #4CD964;
+        }
+        .waiting {
+            color: #FFCC00;
+        }
+        .instructions {
+            font-size: 18px;
+            margin-top: 30px;
+            opacity: 0.8;
+        }
+        .log {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 14px;
+            text-align: left;
+            max-width: 400px;
+        }
+        .log-entry {
+            margin: 5px 0;
+        }
+        .escape-detected {
+            color: #FF3B30;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🎯 ESC 键测试</h1>
+        <div class="status waiting" id="status">等待按键...</div>
+        <div class="instructions">
+            <p>按 ESC 键测试事件捕获</p>
+            <p>如果检测到 ESC 键，状态会变为绿色</p>
+        </div>
+        <div class="log" id="log">
+            <div class="log-entry">页面已加载</div>
+            <div class="log-entry">等待键盘事件...</div>
+        </div>
+    </div>
+
+    <script>
+        const status = document.getElementById('status');
+        const log = document.getElementById('log');
+        let escapeDetected = false;
+
+        function addLog(message, isEscape = false) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry' + (isEscape ? ' escape-detected' : '');
+            entry.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+            log.appendChild(entry);
+
+            // 保持最多 10 条日志
+            while (log.children.length > 10) {
+                log.removeChild(log.firstChild);
+            }
+        }
+
+        // 页面加载时请求焦点
+        window.addEventListener('load', () => {
+            addLog('窗口完全加载');
+            window.focus();
+            addLog('已请求窗口焦点');
+
+            // 设置页面标题
+            document.title = 'ESC 键测试 - 按 ESC 关闭';
+        });
+
+        // 点击时请求焦点
+        document.addEventListener('click', () => {
+            window.focus();
+            addLog('点击时请求焦点');
+        });
+
+        // 测试多种事件监听方式
+        // 方式1: 普通模式
+        window.addEventListener('keydown', (e) => {
+            addLog(`[普通] 按键: ${e.key}`, e.key === 'Escape');
+            if (e.key === 'Escape' && !escapeDetected) {
+                escapeDetected = true;
+                status.textContent = '✓ ESC 键检测成功！';
+                status.className = 'status success';
+                setTimeout(() => {
+                    if (confirm('ESC 键检测成功！是否关闭测试窗口？')) {
+                        window.close();
+                    }
+                }, 500);
+            }
+        });
+
+        // 方式2: 捕获模式
+        window.addEventListener('keydown', (e) => {
+            addLog(`[捕获] 按键: ${e.key}`, e.key === 'Escape');
+        }, { capture: true });
+
+        // 方式3: 文档级别
+        document.addEventListener('keydown', (e) => {
+            addLog(`[文档] 按键: ${e.key}`, e.key === 'Escape');
+        });
+
+        // 防止右键菜单干扰
+        document.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+
+        addLog('键盘监听器已设置');
+    </script>
+</body>
+</html>

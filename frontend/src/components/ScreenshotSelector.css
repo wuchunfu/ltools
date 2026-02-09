@@ -1,0 +1,130 @@
+.screenshot-selector {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  z-index: 9998;  /* 降低层级，让调试面板可以显示在上面 */
+  cursor: crosshair;
+  overflow: hidden;
+}
+
+.screenshot-selector canvas {
+  /* 确保 canvas 可以接收鼠标事件 */
+  position: relative;
+  z-index: 9997;  /* Canvas 应该在最上层接收鼠标事件 */
+  display: block;
+  /* 使用像素化渲染，保持清晰 */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.selector-hint {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+  z-index: 10000;
+}
+
+.selector-toolbar {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  z-index: 10000;
+  animation: slideDown 0.2s ease-out;
+}
+
+.selector-toolbar button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+}
+
+.confirm-button {
+  background: rgba(76, 217, 100, 0.9);
+  color: #000;
+}
+
+.confirm-button:hover {
+  background: rgba(76, 217, 100, 1);
+  transform: scale(1.05);
+}
+
+.cancel-button {
+  background: rgba(255, 59, 48, 0.9);
+  color: #fff;
+}
+
+.cancel-button:hover {
+  background: rgba(255, 59, 48, 1);
+  transform: scale(1.05);
+}
+
+/* 动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+.screenshot-selector {
+  animation: fadeIn 0.15s ease-out;
+}
+
+.selector-toolbar {
+  animation: slideDown 0.2s ease-out;
+}
+
+.selector-hint {
+  animation: scaleIn 0.2s ease-out;
+}
+
+/* 选择区域时的光标样式 */
+.screenshot-selector:active {
+  cursor: crosshair;
+}

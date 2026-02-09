@@ -1,0 +1,10 @@
+/* 遮罩层样式 */
+.mask-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none; /* 不处理事件，事件由交互层处理 */
+  z-index: 10000;
+}
