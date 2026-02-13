@@ -13,9 +13,9 @@ func (s *ScreenshotWindowService) forceWindowToFrontNonMac() error {
 		log.Printf("[ScreenshotWindowService] AppleScript ForceWindowToFront warning: %v", err)
 	}
 	// 设置最后一个窗口（截图窗口）到 CGShieldingWindowLevel
-	log.Printf("[ScreenshotWindowService] Setting last window to CGShieldingWindowLevel...")
-	if err := SetLastWindowToShieldingLevel(); err != nil {
-		log.Printf("[ScreenshotWindowService] SetLastWindowToShieldingLevel warning: %v", err)
-	}
+	// log.Printf("[ScreenshotWindowService] Setting last window to CGShieldingWindowLevel...")
+	// if err := SetLastWindowToShieldingLevel(); err != nil {
+	// 	log.Printf("[ScreenshotWindowService] SetLastWindowToShieldingLevel warning: %v", err)
+	// }
 	return nil
 }

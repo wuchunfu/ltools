@@ -32,12 +32,27 @@ declare module "@wailsio/runtime" {
             "datetime:time": string;
             "datetime:weekday": string;
             "datetime:year": number;
+            "hosts:backup:created": string;
+            "hosts:backup:deleted": string;
+            "hosts:backup:restored": string;
+            "hosts:entry:added": string;
+            "hosts:entry:removed": string;
+            "hosts:entry:updated": string;
+            "hosts:error": string;
+            "hosts:scenario:created": string;
+            "hosts:scenario:deleted": string;
+            "hosts:scenario:switched": string;
+            "hosts:scenario:updated": string;
             "jsoneditor:error": string;
             "jsoneditor:formatted": string;
             "jsoneditor:validated": boolean;
+            "notification:show": string;
             "processmanager:error": string;
             "processmanager:killed": string;
             "processmanager:updated": string;
+            "qrcode:copied": string;
+            "qrcode:generated": string;
+            "qrcode:saved": string;
             "screenshot:cancelled": string;
             "screenshot:captured": string;
             "screenshot:copied": string;
@@ -54,6 +69,17 @@ declare module "@wailsio/runtime" {
             "sysinfo:maxprocs": string;
             "sysinfo:updated": string;
             "sysinfo:uptime": string;
+            "tunnel:created": string;
+            "tunnel:deleted": string;
+            "tunnel:error": any;
+            "tunnel:install:progress": string;
+            "tunnel:log": any;
+            "tunnel:options:updated": string;
+            "tunnel:restarting": string;
+            "tunnel:started": string;
+            "tunnel:stopped": string;
+            "tunnel:updated": string;
+            "tunnel:url": any;
         }
     }
 }

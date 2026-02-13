@@ -1,6 +1,15 @@
 package plugins
 
-import "github.com/wailsapp/wails/v3/pkg/application"
+import (
+	"fmt"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
+)
+
+// BoolPtr 返回 bool 的指针
+func BoolPtr(b bool) *bool {
+	return &b
+}
 
 // PluginType defines the type of plugin
 type PluginType string
@@ -51,9 +60,11 @@ type PluginMetadata struct {
 	Repository  string       `json:"repository,omitempty"`
 	License     string       `json:"license,omitempty"`
 	// ShowInMenu 控制插件是否显示在侧边栏菜单中，默认 true
-	ShowInMenu bool `json:"showInMenu,omitempty"`
+	// 使用指针类型以区分"未设置"（nil）和"显式设置为 false"（*false）
+	ShowInMenu *bool `json:"showInMenu,omitempty"`
 	// HasPage 控制插件是否有独立的页面视图，默认 true
-	HasPage bool `json:"hasPage,omitempty"`
+	// 使用指针类型以区分"未设置"（nil）和"显式设置为 false"（*false）
+	HasPage *bool `json:"hasPage,omitempty"`
 }
 
 // Plugin defines the interface that all plugins must implement
@@ -101,6 +112,31 @@ type BasePlugin struct {
 
 // NewBasePlugin creates a new BasePlugin with the given metadata
 func NewBasePlugin(metadata *PluginMetadata) *BasePlugin {
+	// Debug: print initial value
+	fmt.Printf("[BasePlugin] Plugin %s: ShowInMenu initial value: %v (nil=%v)\n",
+		metadata.ID, metadata.ShowInMenu, metadata.ShowInMenu == nil)
+
+	// Set default values for optional pointer fields
+	// 如果 ShowInMenu 为 nil（未设置），默认为 true
+	if metadata.ShowInMenu == nil {
+		trueValue := true
+		metadata.ShowInMenu = &trueValue
+		fmt.Printf("[BasePlugin] Plugin %s: ShowInMenu defaulted to true\n", metadata.ID)
+	} else {
+		// 保留显式设置的值（可能是 true 或 false）
+		fmt.Printf("[BasePlugin] Plugin %s: ShowInMenu explicitly set to %v\n", metadata.ID, *metadata.ShowInMenu)
+	}
+
+	// 如果 HasPage 为 nil（未设置），默认为 true
+	if metadata.HasPage == nil {
+		trueValue := true
+		metadata.HasPage = &trueValue
+		fmt.Printf("[BasePlugin] Plugin %s: HasPage defaulted to true\n", metadata.ID)
+	} else {
+		// 保留显式设置的值（可能是 true 或 false）
+		fmt.Printf("[BasePlugin] Plugin %s: HasPage explicitly set to %v\n", metadata.ID, *metadata.HasPage)
+	}
+
 	return &BasePlugin{
 		metadata: metadata,
 		enabled:  true, // Enabled by default

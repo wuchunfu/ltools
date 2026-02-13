@@ -29,7 +29,9 @@ interface SearchResult {
   description: string;
   icon: string;
   matchedFields?: string[];
-  type: string; // "plugin" or "app"
+  type: string; // "plugin", "app", or "file"
+  path?: string;          // 文件/目录路径
+  isDirectory?: boolean;  // 是否为目录
 }
 
 /**
@@ -181,6 +183,8 @@ export function SearchWindow() {
         icon: item.icon || '',
         matchedFields: item.matchedFields || [],
         type: item.type || 'plugin',
+        path: item.path,          // 文件/目录路径
+        isDirectory: item.isDirectory,  // 是否为目录
       }));
 
       // 转换应用结果格式，并解码 Unicode 转义字符
@@ -304,12 +308,25 @@ export function SearchWindow() {
     }
   };
 
-  // 打开结果项（插件或应用）
+  // 打开文件/目录路径
+  const openPath = async (path: string) => {
+    console.log('[SearchWindow] Opening path:', path);
+    try {
+      await SearchWindowService.OpenPath(path);
+      // 窗口会在 OpenPath 后自动隐藏
+    } catch (error) {
+      console.error('[SearchWindow] Failed to open path:', error);
+    }
+  };
+
+  // 打开结果项（插件、应用或文件路径）
   const openItem = async (result: SearchResult) => {
     if (result.type === 'app' && result.appId) {
       await openApp(result.appId);
     } else if (result.type === 'plugin' && result.pluginId) {
       await openPlugin(result.pluginId);
+    } else if (result.type === 'file' && result.path) {
+      await openPath(result.path);
     }
   };
 
@@ -431,7 +448,7 @@ export function SearchWindow() {
           <div className="results-list">
             {results.map((result, index) => (
               <div
-                key={result.pluginId || result.appId}
+                key={result.pluginId || result.appId || result.path}
                 className={`result-item ${
                   index === selectedIndex ? 'result-item-selected' : ''
                 }`}
@@ -462,7 +479,7 @@ export function SearchWindow() {
                     </div>
                   )}
                   <div className="result-type-badge">
-                    {result.type === 'app' ? '应用' : '插件'}
+                    {result.type === 'app' ? '应用' : result.type === 'file' ? (result.isDirectory ? '文件夹' : '文件') : '插件'}
                   </div>
                 </div>
                 {index === selectedIndex && (
@@ -481,7 +498,7 @@ export function SearchWindow() {
         <div className="search-statusbar">
           <div className="statusbar-info">
             <span className="statusbar-count">
-              找到 {results.length} 个插件
+              找到 {results.length} 个结果
             </span>
           </div>
           <div className="statusbar-shortcuts">

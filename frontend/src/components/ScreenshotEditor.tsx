@@ -262,7 +262,7 @@ const ScreenshotEditor: React.FC<ScreenshotEditorProps> = ({ imageData, onClose 
         break;
       case 'arrow':
         if (annotation.width && annotation.height) {
-          drawArrow(ctx, annotation.x, annotation.y, annotation.x + annotation.width, annotation.y + annotation.height);
+          drawArrow(ctx, annotation.x, annotation.y, annotation.x + annotation.width, annotation.y + annotation.height, annotation.lineWidth);
         }
         break;
       case 'brush':
@@ -278,10 +278,218 @@ const ScreenshotEditor: React.FC<ScreenshotEditorProps> = ({ imageData, onClose 
       case 'text':
         if (annotation.text) {
           ctx.font = `${annotation.lineWidth * 5}px Arial`;
+          // 设置文本基线为顶部，让文字从鼠标位置向下绘制
+          ctx.textBaseline = 'top';
           ctx.fillText(annotation.text, annotation.x, annotation.y);
+          // 重置为默认值（虽然后续绘制会覆盖，但保持状态一致性）
+          ctx.textBaseline = 'alphabetic';
+        }
+        break;
+      case 'blur':
+        if (annotation.width && annotation.height && annotation.height > 5) {
+          // 判断是否是预览状态（当前正在绘制的标注）
+          const isPreview = (annotation as any).isPreview === true;
+          drawBlurEffect(ctx, annotation.x, annotation.y, annotation.width, annotation.height, isPreview);
+        }
+        break;
+      case 'mosaic':
+        if (annotation.width && annotation.height && annotation.height > 5) {
+          // 判断是否是预览状态（当前正在绘制的标注）
+          const isPreview = (annotation as any).isPreview === true;
+          drawMosaicEffect(ctx, annotation.x, annotation.y, annotation.width, annotation.height, isPreview);
+        }
+        break;
+      case 'crop':
+        if (annotation.width && annotation.height) {
+          // 裁剪工具只显示边框
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.setLineDash([5, 5]);
+          ctx.strokeRect(annotation.x, annotation.y, annotation.width, annotation.height);
+          ctx.setLineDash([]);
+
+          // 添加裁剪角标记
+          const cornerSize = 10;
+          ctx.strokeStyle = annotation.color;
+          ctx.lineWidth = 2;
+
+          // 左上角
+          ctx.beginPath();
+          ctx.moveTo(annotation.x, annotation.y + cornerSize);
+          ctx.lineTo(annotation.x, annotation.y);
+          ctx.lineTo(annotation.x + cornerSize, annotation.y);
+          ctx.stroke();
+
+          // 右上角
+          ctx.beginPath();
+          ctx.moveTo(annotation.x + annotation.width - cornerSize, annotation.y);
+          ctx.lineTo(annotation.x + annotation.width, annotation.y);
+          ctx.lineTo(annotation.x + annotation.width, annotation.y + cornerSize);
+          ctx.stroke();
+
+          // 右下角
+          ctx.beginPath();
+          ctx.moveTo(annotation.x + annotation.width, annotation.y + annotation.height - cornerSize);
+          ctx.lineTo(annotation.x + annotation.width, annotation.y + annotation.height);
+          ctx.lineTo(annotation.x + annotation.width - cornerSize, annotation.y + annotation.height);
+          ctx.stroke();
+
+          // 左下角
+          ctx.beginPath();
+          ctx.moveTo(annotation.x + cornerSize, annotation.y + annotation.height);
+          ctx.lineTo(annotation.x, annotation.y + annotation.height);
+          ctx.lineTo(annotation.x, annotation.y + annotation.height - cornerSize);
+          ctx.stroke();
         }
         break;
     }
+  };
+
+  // 绘制模糊效果
+  const drawBlurEffect = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    isPreview: boolean = false
+  ) => {
+    // 保存当前上下文状态
+    ctx.save();
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // 如果是预览模式，只绘制边框和半透明遮罩
+    if (isPreview) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.strokeRect(x, y, width, height);
+      ctx.setLineDash([]);
+
+      // 绘制半透明遮罩表示模糊区域
+      ctx.fillStyle = 'rgba(150, 150, 255, 0.3)';
+      ctx.fillRect(x, y, width, height);
+
+      // 在区域中心显示模糊预览提示
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '14px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('模糊区域', x + width / 2, y + height / 2);
+
+      ctx.restore();
+      return;
+    }
+
+    // 创建临时画布来处理模糊
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return;
+
+    tempCanvas.width = Math.abs(width);
+    tempCanvas.height = Math.abs(height);
+
+    // 从主画布复制选中区域
+    tempCtx.drawImage(
+      canvas,
+      x, y, Math.abs(width), Math.abs(height),
+      0, 0, Math.abs(width), Math.abs(height)
+    );
+
+    // 应用更强的模糊滤镜（从 10px 增加到 25px）
+    tempCtx.filter = 'blur(25px)';
+    tempCtx.drawImage(tempCanvas, 0, 0);
+
+    // 将模糊后的图像绘制回主画布
+    ctx.drawImage(tempCanvas, x, y);
+
+    ctx.restore();
+  };
+
+  // 绘制马赛克效果
+  const drawMosaicEffect = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    isPreview: boolean = false
+  ) => {
+    // 如果是预览模式，只绘制边框和半透明遮罩
+    if (isPreview) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.strokeRect(x, y, width, height);
+      ctx.setLineDash([]);
+
+      // 绘制半透明遮罩表示马赛克区域
+      ctx.fillStyle = 'rgba(150, 255, 150, 0.3)';
+      ctx.fillRect(x, y, width, height);
+
+      // 在区域中心显示马赛克预览提示
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = '14px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('马赛克区域', x + width / 2, y + height / 2);
+
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // 马赛克块大小（根据区域大小动态调整）
+    const blockSize = Math.max(10, Math.min(20, Math.floor(Math.max(width, height) / 20)));
+    const absWidth = Math.abs(width);
+    const absHeight = Math.abs(height);
+
+    // 获取图像数据
+    const imageData = ctx.getImageData(
+      Math.min(x, x + width),
+      Math.min(y, y + height),
+      absWidth,
+      absHeight
+    );
+
+    const data = imageData.data;
+
+    // 对每个块进行像素化处理
+    for (let by = 0; by < absHeight; by += blockSize) {
+      for (let bx = 0; bx < absWidth; bx += blockSize) {
+        // 计算块的平均颜色
+        let r = 0, g = 0, b = 0, count = 0;
+
+        for (let py = by; py < by + blockSize && py < absHeight; py++) {
+          for (let px = bx; px < bx + blockSize && px < absWidth; px++) {
+            const i = (py * absWidth + px) * 4;
+            r += data[i];
+            g += data[i + 1];
+            b += data[i + 2];
+            count++;
+          }
+        }
+
+        r = Math.floor(r / count);
+        g = Math.floor(g / count);
+        b = Math.floor(b / count);
+
+        // 填充整个块
+        for (let py = by; py < by + blockSize && py < absHeight; py++) {
+          for (let px = bx; px < bx + blockSize && px < absWidth; px++) {
+            const i = (py * absWidth + px) * 4;
+            data[i] = r;
+            data[i + 1] = g;
+            data[i + 2] = b;
+          }
+        }
+      }
+    }
+
+    // 将处理后的图像数据放回画布
+    ctx.putImageData(imageData, Math.min(x, x + width), Math.min(y, y + height));
   };
 
   // 绘制箭头
@@ -290,20 +498,31 @@ const ScreenshotEditor: React.FC<ScreenshotEditorProps> = ({ imageData, onClose 
     fromX: number,
     fromY: number,
     toX: number,
-    toY: number
+    toY: number,
+    lineWidth: number = 3
   ) => {
-    const headLength = 15;
+    // 箭头头部大小随线条粗细变化，基础大小 15，每增加 1px 粗细增加 2
+    const headLength = 15 + (lineWidth - 3) * 2;
+    // 箭头头部角度（弧度）
+    const headAngle = Math.PI / 6; // 30度
+
     const angle = Math.atan2(toY - fromY, toX - fromX);
 
+    // 计算箭头头部开始的点（线条终点）
+    const lineEndX = toX - headLength * Math.cos(angle);
+    const lineEndY = toY - headLength * Math.sin(angle);
+
+    // 绘制线条（画到箭头头部开始的点）
     ctx.beginPath();
     ctx.moveTo(fromX, fromY);
-    ctx.lineTo(toX, toY);
+    ctx.lineTo(lineEndX, lineEndY);
     ctx.stroke();
 
+    // 绘制箭头头部
     ctx.beginPath();
     ctx.moveTo(toX, toY);
-    ctx.lineTo(toX - headLength * Math.cos(angle - Math.PI / 6), toY - headLength * Math.sin(angle - Math.PI / 6));
-    ctx.lineTo(toX - headLength * Math.cos(angle + Math.PI / 6), toY - headLength * Math.sin(angle + Math.PI / 6));
+    ctx.lineTo(toX - headLength * Math.cos(angle - headAngle), toY - headLength * Math.sin(angle - headAngle));
+    ctx.lineTo(toX - headLength * Math.cos(angle + headAngle), toY - headLength * Math.sin(angle + headAngle));
     ctx.closePath();
     ctx.fill();
   };
@@ -316,8 +535,12 @@ const ScreenshotEditor: React.FC<ScreenshotEditorProps> = ({ imageData, onClose 
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // 计算画布的缩放比例（实际像素尺寸 / 显示尺寸）
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    // 转换为画布实际像素坐标
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
 
     setIsDrawing(true);
     setStartPos({ x, y });
@@ -332,19 +555,88 @@ const ScreenshotEditor: React.FC<ScreenshotEditorProps> = ({ imageData, onClose 
         points: [{ x, y }],
       });
     } else if (selectedTool === 'text') {
-      const text = prompt('请输入文字:', '');
-      if (text) {
-        const newAnnotation: Annotation = {
-          id: Date.now().toString(),
-          type: selectedTool,
-          x, y,
-          color: selectedColor,
-          lineWidth,
-          text,
-        };
-        setAnnotations([...annotations, newAnnotation]);
-      }
-      setIsDrawing(false);
+      // 文字工具：显示内联输入框
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = '输入文字...';
+      input.style.position = 'fixed';
+      // 直接使用鼠标屏幕坐标定位输入框
+      input.style.left = `${e.clientX}px`;
+      input.style.top = `${e.clientY}px`;
+      input.style.background = 'rgba(0, 0, 0, 0.8)';
+      input.style.color = '#fff';
+      input.style.border = `2px solid ${selectedColor}`;
+      input.style.borderRadius = '4px';
+      input.style.padding = '8px';
+      input.style.fontSize = `${lineWidth * 5}px`;
+      input.style.fontFamily = 'Arial, sans-serif';
+      input.style.zIndex = '10001';
+      input.style.minWidth = '200px';
+
+      document.body.appendChild(input);
+      input.focus();
+
+      const handleTextConfirm = () => {
+        const text = input.value.trim();
+        if (text) {
+          const newAnnotation: Annotation = {
+            id: Date.now().toString(),
+            type: selectedTool,
+            x, y,
+            color: selectedColor,
+            lineWidth,
+            text,
+          };
+          setAnnotations(prev => [...prev, newAnnotation]);
+        }
+        document.body.removeChild(input);
+        setIsDrawing(false);
+      };
+
+      const handleTextCancel = () => {
+        document.body.removeChild(input);
+        setIsDrawing(false);
+      };
+
+      // 确认输入：Enter 或失去焦点
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          handleTextConfirm();
+        } else if (e.key === 'Escape') {
+          handleTextCancel();
+        }
+      });
+
+      // 延迟添加失去焦点监听，避免立即触发
+      setTimeout(() => {
+        input.addEventListener('blur', () => {
+          if (document.body.contains(input)) {
+            handleTextConfirm();
+          }
+        });
+      }, 100);
+    } else if (selectedTool === 'blur' || selectedTool === 'mosaic' || selectedTool === 'crop') {
+      // 这些工具需要区域选择，初始化当前标注
+      setCurrentAnnotation({
+        id: Date.now().toString(),
+        type: selectedTool,
+        x, y,
+        width: 0,
+        height: 0,
+        color: selectedColor,
+        lineWidth,
+      });
+    } else {
+      // 矩形、椭圆、箭头工具
+      setCurrentAnnotation({
+        id: Date.now().toString(),
+        type: selectedTool,
+        x, y,
+        width: 0,
+        height: 0,
+        color: selectedColor,
+        lineWidth,
+      });
     }
   };
 
@@ -356,8 +648,12 @@ const ScreenshotEditor: React.FC<ScreenshotEditorProps> = ({ imageData, onClose 
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // 计算画布的缩放比例（实际像素尺寸 / 显示尺寸）
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    // 转换为画布实际像素坐标
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
 
     if (selectedTool === 'brush' && currentAnnotation) {
       setCurrentAnnotation({
@@ -365,7 +661,7 @@ const ScreenshotEditor: React.FC<ScreenshotEditorProps> = ({ imageData, onClose 
         points: [...(currentAnnotation.points || []), { x, y }],
       });
     } else {
-      setCurrentAnnotation({
+      const newAnnotation: Annotation = {
         id: Date.now().toString(),
         type: selectedTool,
         x: startPos.x,
@@ -374,14 +670,75 @@ const ScreenshotEditor: React.FC<ScreenshotEditorProps> = ({ imageData, onClose 
         height: y - startPos.y,
         color: selectedColor,
         lineWidth,
-      });
+      };
+      // 为模糊和马赛克工具添加预览标记
+      if (selectedTool === 'blur' || selectedTool === 'mosaic') {
+        (newAnnotation as any).isPreview = true;
+      }
+      setCurrentAnnotation(newAnnotation);
     }
   };
 
   // 处理鼠标释放
   const handleMouseUp = () => {
     if (isDrawing && currentAnnotation) {
-      setAnnotations([...annotations, currentAnnotation]);
+      // 裁剪工具特殊处理
+      if (currentAnnotation.type === 'crop' &&
+          currentAnnotation.width &&
+          currentAnnotation.height &&
+          Math.abs(currentAnnotation.width) > 20 &&
+          Math.abs(currentAnnotation.height) > 20) {
+
+        const canvas = canvasRef.current;
+        const image = imageRef.current;
+        if (canvas && image) {
+          // 创建临时画布来存储裁剪后的图像
+          const croppedCanvas = document.createElement('canvas');
+          const x = Math.min(currentAnnotation.x, currentAnnotation.x + currentAnnotation.width);
+          const y = Math.min(currentAnnotation.y, currentAnnotation.y + currentAnnotation.height);
+          const w = Math.abs(currentAnnotation.width);
+          const h = Math.abs(currentAnnotation.height);
+
+          croppedCanvas.width = w;
+          croppedCanvas.height = h;
+
+          const croppedCtx = croppedCanvas.getContext('2d');
+          if (croppedCtx) {
+            // 从原始图像裁剪区域
+            croppedCtx.drawImage(
+              image,
+              x, y, w, h,
+              0, 0, w, h
+            );
+
+            // 更新当前图像为裁剪后的版本
+            const croppedDataUrl = croppedCanvas.toDataURL('image/png');
+            setCurrentImage(croppedDataUrl);
+
+            // 重置标注（裁剪后旧标注不再有效）
+            setAnnotations([]);
+
+            addLog(`已裁剪图像: ${w}x${h}`);
+          }
+        }
+      } else if (currentAnnotation.type === 'blur' || currentAnnotation.type === 'mosaic') {
+        // 模糊和马赛克效果是破坏性的，直接应用到画布
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            // 重绘所有旧标注
+            renderCanvas();
+            // 应用当前效果
+            drawAnnotation(ctx, currentAnnotation);
+            // 保存到标注列表中
+            setAnnotations([...annotations, currentAnnotation]);
+          }
+        }
+      } else {
+        // 其他工具直接添加到标注列表
+        setAnnotations([...annotations, currentAnnotation]);
+      }
     }
     setIsDrawing(false);
     setCurrentAnnotation(null);
@@ -403,22 +760,31 @@ const ScreenshotEditor: React.FC<ScreenshotEditorProps> = ({ imageData, onClose 
     }
   }, [onClose]);
 
-  // 保存图片
+  // 保存图片 - 使用系统保存对话框
   const handleSave = useCallback(async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const dataUrl = canvas.toDataURL('image/png');
     try {
-      const savedPath = await ScreenshotService.SaveImageWithData(dataUrl, '');
-      success(`图片已保存到: ${savedPath}`);
-      handleClose();
+      // 使用带对话框的保存方法，让用户选择保存路径
+      const savedPath = await ScreenshotService.SaveImageWithDataWithDialog(dataUrl);
+      if (savedPath) {
+        success(`图片已保存到: ${savedPath}`);
+        handleClose();
+      }
+      // 如果 savedPath 为空，说明用户取消了保存，不关闭编辑器
     } catch (err) {
       console.error('保存失败:', err);
       const errorMessage = err instanceof Error ? err.message : String(err);
-      error('保存失败: ' + errorMessage);
+      // 区分用户取消和真正的错误
+      if (errorMessage.includes('cancelled') || errorMessage.includes('用户取消')) {
+        addLog('用户取消了保存');
+      } else {
+        error('保存失败: ' + errorMessage);
+      }
     }
-  }, [success, error, handleClose]);
+  }, [success, error, handleClose, addLog]);
 
   // 更新 ref 引用
   useEffect(() => {

@@ -1,0 +1,130 @@
+package tunnel
+
+import "time"
+
+// ProtocolType 支持的协议类型
+type ProtocolType string
+
+const (
+	ProtocolFRP ProtocolType = "frp"
+)
+
+// ProxyType FRP 代理类型
+type ProxyType string
+
+const (
+	ProxyTypeTCP   ProxyType = "tcp"
+	ProxyTypeHTTP  ProxyType = "http"
+	ProxyTypeHTTPS ProxyType = "https"
+	ProxyTypeSTCP  ProxyType = "stcp"
+	ProxyTypeXTCP  ProxyType = "xtcp"
+)
+
+// TunnelStatus 隧道运行状态
+type TunnelStatus string
+
+const (
+	TunnelStatusStopped  TunnelStatus = "stopped"
+	TunnelStatusStarting TunnelStatus = "starting"
+	TunnelStatusRunning  TunnelStatus = "running"
+	TunnelStatusError    TunnelStatus = "error"
+)
+
+// FRPServerConfig FRP 服务器配置
+type FRPServerConfig struct {
+	Address string `json:"address"` // serverAddr:port
+	Token   string `json:"token"`  // 认证 token
+}
+
+// Tunnel 单个隧道配置
+type Tunnel struct {
+	ID       string       `json:"id"`
+	Name     string       `json:"name"`
+	Protocol  ProtocolType `json:"protocol"` // 协议类型：frp
+
+	// 通用字段
+	LocalHost string `json:"localHost"`
+	LocalPort int    `json:"localPort"`
+
+	// FRP 专用字段
+	ProxyType  ProxyType         `json:"proxyType,omitempty"` // http, https, tcp, stcp, xtcp
+	FRPServer *FRPServerConfig `json:"frpServer,omitempty"` // FRP 服务器配置
+	Subdomain  string           `json:"subdomain,omitempty"` // 子域名
+
+	// 通用字段
+	Enabled   bool      `json:"enabled"`
+	AutoStart bool      `json:"autoStart"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// TunnelRuntimeInfo 隧道运行时信息
+type TunnelRuntimeInfo struct {
+	TunnelID  string       `json:"tunnelId"`
+	Status   TunnelStatus `json:"status"`
+	PID      int          `json:"pid"`
+	PublicURL string       `json:"publicUrl"`
+	LastError string       `json:"lastError"`
+	LogPath   string       `json:"logPath,omitempty"`
+}
+
+// GlobalOptions 全局配置
+type GlobalOptions struct {
+	// FRP 选项
+	DefaultProtocol ProtocolType        `json:"defaultProtocol,omitempty"` // 默认协议：frp
+	FRPServer      *FRPServerConfig `json:"frpServer,omitempty"` // 默认 FRP 服务器
+}
+
+// InstallationStatus 安装状态
+type InstallationStatus struct {
+	// FRP 安装状态
+	FRPInstalled bool   `json:"frpInstalled"`
+	FRPVersion  string `json:"frpVersion,omitempty"`
+	FRPPath     string `json:"frpPath,omitempty"`
+}
+
+// CreateTunnelRequest 创建隧道请求
+type CreateTunnelRequest struct {
+	Name      string       `json:"name"`
+	Protocol  ProtocolType `json:"protocol"` // 协议选择
+	LocalHost string       `json:"localHost"`
+	LocalPort int          `json:"localPort"`
+	AutoStart bool         `json:"autoStart,omitempty"`
+}
+
+// UpdateTunnelRequest 更新隧道请求
+type UpdateTunnelRequest struct {
+	Name      string       `json:"name"`
+	Protocol  ProtocolType `json:"protocol"`
+
+	LocalHost string `json:"localHost"`
+	LocalPort int    `json:"localPort"`
+	Enabled   bool   `json:"enabled"`
+	AutoStart bool   `json:"autoStart"`
+
+	// FRP 专用字段
+	ProxyType  ProxyType         `json:"proxyType,omitempty"`
+	FRPServer *FRPServerConfig `json:"frpServer,omitempty"`
+	Subdomain  string           `json:"subdomain,omitempty"` // 子域名
+}
+
+// OperationResult 操作结果
+type OperationResult struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
+// TunnelLogEntry 隧道日志条目
+type TunnelLogEntry struct {
+	Timestamp time.Time `json:"timestamp"`
+	Level     string    `json:"level"` // info, error, warning
+	Message   string    `json:"message"`
+}
+
+// TunnelConfig 统一的配置结构（配置文件）
+type TunnelConfig struct {
+	Version       int               `json:"version"`
+	GlobalOptions GlobalOptions     `json:"globalOptions"`
+	Tunnels       []Tunnel          `json:"tunnels"`
+	InstallStatus *InstallationStatus `json:"installStatus,omitempty"`
+}

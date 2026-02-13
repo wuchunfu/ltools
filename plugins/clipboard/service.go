@@ -72,3 +72,23 @@ func (s *ClipboardService) DeleteItem(index int) error {
 func (s *ClipboardService) GetCurrentClipboard() string {
 	return s.plugin.GetCurrentClipboard()
 }
+
+// GetImageFromClipboard returns the current image from clipboard as base64
+func (s *ClipboardService) GetImageFromClipboard() string {
+	return s.plugin.GetImageFromClipboard()
+}
+
+// CopyImageToClipboard copies a base64 encoded image to the clipboard
+func (s *ClipboardService) CopyImageToClipboard(base64Data string) error {
+	return s.plugin.CopyImageToClipboard(base64Data)
+}
+
+// SaveImageToFile saves a base64 encoded image to a file
+func (s *ClipboardService) SaveImageToFile(base64Data, defaultFilename string) (string, error) {
+	return s.plugin.SaveImageToFile(base64Data, defaultFilename)
+}
+
+// GetClipboardContentType returns the type of content in the clipboard
+func (s *ClipboardService) GetClipboardContentType() string {
+	return s.plugin.GetClipboardContentType()
+}

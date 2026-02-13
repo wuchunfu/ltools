@@ -48,7 +48,7 @@ func NewShortcutService(app *application.App, dataDir string) (*ShortcutService,
 
 // ServiceStartup is called when the application starts
 func (s *ShortcutService) ServiceStartup(app *application.App) error {
-	app.Logger.Info("[ShortcutService] Starting up, registering all keyboard shortcuts...")
+	// app.Logger.Info("[ShortcutService] Starting up, registering all keyboard shortcuts...")
 
 	if s.useGlobalHotkeys {
 		// Check for accessibility permissions on macOS
@@ -84,7 +84,7 @@ func (s *ShortcutService) ServiceStartup(app *application.App) error {
 				// Bring window to front, except for search window shortcut
 				// Search window should be shown independently without affecting main window visibility
 				if s.mainWindow != nil && pluginID != "search.window.builtin" {
-					app.Logger.Info("[ShortcutService] Bringing window to front")
+					// app.Logger.Info("[ShortcutService] Bringing window to front")
 					s.mainWindow.Show()
 				}
 
@@ -159,7 +159,7 @@ func (s *ShortcutService) SetMainWindow(window *application.WebviewWindow) {
 	s.registrationLock.Lock()
 	defer s.registrationLock.Unlock()
 	s.mainWindow = window
-	log.Printf("[ShortcutService] Main window reference set")
+	// log.Printf("[ShortcutService] Main window reference set")
 }
 func (s *ShortcutService) SetShortcut(keyCombo, pluginID string) error {
 	// Check for conflicts first
@@ -317,7 +317,7 @@ func (s *ShortcutService) registerShortcut(keyCombo, pluginID string) error {
 	// Normalize key combo for Wails
 	normalizedKeyCombo := normalizeKeyCombo(keyCombo)
 
-	log.Printf("[ShortcutService] Registering shortcut: %s -> %s", normalizedKeyCombo, pluginID)
+	// log.Printf("[ShortcutService] Registering shortcut: %s -> %s", normalizedKeyCombo, pluginID)
 
 	// Wails v3 KeyBinding expects format like "Ctrl+S" or "Cmd+Shift+Z"
 	wailsKeyCombo := convertToWailsFormat(normalizedKeyCombo)
@@ -392,7 +392,7 @@ func (s *ShortcutService) unregisterShortcut(keyCombo string) {
 	normalizedKeyCombo := normalizeKeyCombo(keyCombo)
 	wailsKeyCombo := convertToWailsFormat(normalizedKeyCombo)
 
-	log.Printf("[ShortcutService] Unregistering shortcut: %s", keyCombo)
+	// log.Printf("[ShortcutService] Unregistering shortcut: %s", keyCombo)
 
 	// Try to remove both formats
 	s.app.KeyBinding.Remove(wailsKeyCombo)

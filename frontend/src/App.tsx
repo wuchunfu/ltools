@@ -7,6 +7,9 @@ import { CalculatorWidget } from "./components/CalculatorWidget";
 import { JSONEditorWidget } from "./components/JSONEditorWidget";
 import { ProcessManagerWidget } from "./components/ProcessManagerWidget";
 import { PasswordGeneratorWidget } from "./components/PasswordGeneratorWidget";
+import { QrcodeWidget } from "./components/QrcodeWidget";
+import { HostsWidget } from "./components/HostsWidget";
+import { TunnelWidget } from "./components/TunnelWidget";
 import { ScreenshotWidget } from "./components/ScreenshotWidget";
 import { Settings } from "./components/Settings";
 import { Icon } from './components/Icon';
@@ -32,20 +35,18 @@ interface NavItem {
 
 const baseNavItems: NavItem[] = [
   { id: 'home', label: '首页', icon: 'home' },
-  { id: 'screenshot', label: '截图', icon: 'camera' },
-  { id: 'datetime', label: '日期时间', icon: 'clock' },
-  { id: 'password', label: '密码生成器', icon: 'key' },
   { id: 'plugins', label: '插件市场', icon: 'puzzle-piece' },
   { id: 'settings', label: '设置', icon: 'cog' },
 ];
 
 type IconName = 'home' | 'puzzle-piece' | 'clock' | 'cog' | 'key' | 'shield-check' | 'funnel' |
   'check-circle' | 'x-circle' | 'exclamation-circle' | 'information-circle' |
-  'search' | 'chevron-down' | 'chevron-right' | 'external-link' | 'refresh' |
+  'search' | 'chevron-down' | 'chevron-right' | 'external-link' | 'refresh' | 'plus' | 'minus' |
   'clipboard' | 'document' | 'copy' | 'sparkles' | 'cube' | 'keyboard' | 'command' |
   'calculator' | 'cpu' | 'memory' | 'disk' | 'network' | 'server' | 'chip' |
   'code' | 'alert-circle' | 'check' | 'download' | 'upload' | 'process' | 'close' |
-  'trash' | 'x-mark' | 'camera';
+  'trash' | 'x-mark' | 'camera' | 'qrcode' | 'folder' | 'folder-open' | 'wrench' |
+  'arrow-left' | 'arrow-right' | 'stop' | 'play' | 'pencil' | 'log' | 'terminal';
 
 function App() {
   const [activeTab, setActiveTab] = useState<string>('home');
@@ -54,7 +55,8 @@ function App() {
   // 获取已启用的插件用于动态菜单
   const { plugins } = usePlugins();
   const enabledPlugins = useMemo(() => {
-    return plugins.filter(p => p.state === PluginState.PluginStateEnabled);
+    const enabled = plugins.filter(p => p.state === PluginState.PluginStateEnabled);
+    return enabled;
   }, [plugins]);
 
   // 从后端加载快捷键配置
@@ -117,15 +119,9 @@ function App() {
         return;
       }
 
-      // 特殊处理 datetime 插件
-      if (pluginId === 'datetime.builtin') {
-        console.log('[App] Switching to datetime tab');
-        setActiveTab('datetime');
-      } else {
-        const newTab = `plugin-${pluginId}`;
-        console.log('[App] Switching to plugin tab:', newTab);
-        setActiveTab(newTab);
-      }
+      const newTab = `plugin-${pluginId}`;
+      console.log('[App] Switching to plugin tab:', newTab);
+      setActiveTab(newTab);
     });
 
     console.log('[App] Backend shortcut event listener REGISTERED successfully');
@@ -234,14 +230,17 @@ function App() {
   // 根据插件 ID 获取对应的图标
   const getPluginIcon = (pluginId: string): IconName => {
     const iconMap: Record<string, IconName> = {
-      'screenshot.builtin': 'camera',
-      'datetime.builtin': 'clock',
       'calculator.builtin': 'calculator',
       'clipboard.builtin': 'clipboard',
       'jsoneditor.builtin': 'code',
       'processmanager.builtin': 'process',
       'sysinfo.builtin': 'cpu',
-      'search.window.builtin': 'search',
+      'qrcode.builtin': 'qrcode',
+      'hosts.builtin': 'server',
+      'tunnel.builtin': 'network',
+      'datetime.builtin': 'clock',
+      'screenshot.builtin': 'camera',
+      'password.builtin': 'key',
     };
     return iconMap[pluginId] || 'puzzle-piece';
   };
@@ -249,13 +248,14 @@ function App() {
   // 动态生成菜单项（基础菜单 + 已启用的插件）
   const navItems = useMemo(() => {
     const items: NavItem[] = [...baseNavItems];
-    // 添加已启用的插件到菜单，排除 showInMenu: false 的插件
+    // 添加已启用的插件到菜单
     enabledPlugins.forEach(plugin => {
-      // 排除有专门菜单项的插件（datetime, screenshot）
-      // 排除 showInMenu: false 的插件
-      if (plugin.id !== 'datetime.builtin' &&
-          plugin.id !== 'screenshot.builtin' &&
-          plugin.showInMenu !== false) {
+      // 统一过滤条件：
+      // 1. HasPage: false -> 不显示（如 app-launcher，无需页面）
+      // 2. ShowInMenu: false -> 不显示（如某些特殊功能插件）
+      const shouldShow = plugin.hasPage !== false && plugin.showInMenu !== false;
+      console.log(`[App] Plugin ${plugin.id}: hasPage=${plugin.hasPage}, showInMenu=${plugin.showInMenu}, shouldShow=${shouldShow}`);
+      if (shouldShow) {
         items.push({
           id: `plugin-${plugin.id}`,
           label: plugin.name,
@@ -264,6 +264,8 @@ function App() {
         });
       }
     });
+    console.log('[App] Total navItems:', items.length);
+    console.log('[App] NavItem IDs:', items.map(i => i.id));
     return items;
   }, [enabledPlugins]);
 
@@ -313,7 +315,7 @@ function App() {
         </div>
 
         {/* 导航菜单 */}
-        <nav className="flex-1 p-3 space-y-1">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-hide">
           {navItems.map((item) => (
             <button
               key={item.id}
@@ -366,56 +368,8 @@ function App() {
           </div>
         )}
 
-        {activeTab === 'screenshot' && (
-          <div className="p-8">
-            <div className="max-w-2xl mx-auto">
-              <div className="text-center mb-8">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#A78BFA] mb-4">
-                  <Icon name="camera" size={28} color="white" />
-                </div>
-                <h1 className="text-3xl font-bold mb-2">截图工具</h1>
-                <p className="text-white/50">微信风格的屏幕截图和标注工具</p>
-              </div>
-              <div className="space-y-8">
-                <ScreenshotWidget />
-              </div>
-            </div>
-          </div>
-        )}
 
-        {activeTab === 'datetime' && (
-          <div className="p-8">
-            <div className="max-w-2xl mx-auto">
-              <div className="text-center mb-8">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#A78BFA] mb-4">
-                  <Icon name="clock" size={28} color="white" />
-                </div>
-                <h1 className="text-3xl font-bold mb-2">日期时间插件</h1>
-                <p className="text-white/50">实时显示当前时间和日期</p>
-              </div>
-              <div className="space-y-8">
-                <DateTimeWidget />
-                <TimestampConverter />
-              </div>
-            </div>
-          </div>
-        )}
 
-        {activeTab === 'password' && (
-          <div className="p-8">
-            <div className="max-w-6xl mx-auto">
-              <div className="text-center mb-8">
-                <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#A78BFA] mb-6">
-                  <Icon name="key" size={36} color="white" />
-                </div>
-                <h1 className="text-3xl font-bold mb-2">随机密码生成器</h1>
-                <p className="text-white/50">生成安全的随机密码，支持自定义选项</p>
-                <p className="text-sm text-white/30 mt-2">使用安全的随机数生成算法</p>
-              </div>
-              <PasswordGeneratorWidget />
-            </div>
-          </div>
-        )}
 
         {activeTab === 'settings' && (
           <Settings
@@ -456,7 +410,7 @@ function App() {
 
         {/* 动态插件视图 - 使用缓存组件保持状态 */}
         <div className={activeTab.startsWith('plugin-') ? '' : 'hidden'}>
-          <PluginView pluginId={activeTab.replace('plugin-', '')} plugins={plugins} />
+          <PluginView pluginId={activeTab.replace('plugin-', '')} plugins={plugins} onBack={() => setActiveTab('home')} />
         </div>
       </main>
     </div>
@@ -470,9 +424,10 @@ function App() {
 interface PluginViewProps {
   pluginId: string;
   plugins: Array<any>;
+  onBack?: () => void;
 }
 
-function PluginView({ pluginId, plugins }: PluginViewProps) {
+function PluginView({ pluginId, plugins, onBack }: PluginViewProps) {
   const plugin = plugins.find(p => p.id === pluginId);
 
   if (!plugin) {
@@ -526,7 +481,7 @@ function PluginView({ pluginId, plugins }: PluginViewProps) {
   return (
     <>
       {/* 剪贴板插件 */}
-      {pluginId === 'clipboard.builtin' && plugins.some(p => p.id === 'clipboard.builtin') && (
+      {pluginId === 'clipboard.builtin' && (
         <div className="p-6">
           <div className="max-w-4xl mx-auto">
             <div className="mb-6">
@@ -547,7 +502,7 @@ function PluginView({ pluginId, plugins }: PluginViewProps) {
       )}
 
       {/* 系统信息插件 */}
-      {pluginId === 'sysinfo.builtin' && plugins.some(p => p.id === 'sysinfo.builtin') && (
+      {pluginId === 'sysinfo.builtin' && (
         <div className="p-6">
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-8">
@@ -564,7 +519,7 @@ function PluginView({ pluginId, plugins }: PluginViewProps) {
       )}
 
       {/* 计算器插件 */}
-      {pluginId === 'calculator.builtin' && plugins.some(p => p.id === 'calculator.builtin') && (
+      {pluginId === 'calculator.builtin' && (
         <div className="p-6">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-8">
@@ -581,7 +536,7 @@ function PluginView({ pluginId, plugins }: PluginViewProps) {
       )}
 
       {/* JSON 编辑器插件 */}
-      {pluginId === 'jsoneditor.builtin' && plugins.some(p => p.id === 'jsoneditor.builtin') && (
+      {pluginId === 'jsoneditor.builtin' && (
         <div className="p-6">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-8">
@@ -598,7 +553,7 @@ function PluginView({ pluginId, plugins }: PluginViewProps) {
       )}
 
       {/* 进程管理器插件 */}
-      {pluginId === 'processmanager.builtin' && plugins.some(p => p.id === 'processmanager.builtin') && (
+      {pluginId === 'processmanager.builtin' && (
         <div className="p-6">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-8">
@@ -614,8 +569,105 @@ function PluginView({ pluginId, plugins }: PluginViewProps) {
         </div>
       )}
 
-      {/* 默认插件界面 */}
-      {!pluginId.startsWith('clipboard') && !pluginId.startsWith('sysinfo') && !pluginId.startsWith('calculator') && !pluginId.startsWith('jsoneditor') && !pluginId.startsWith('processmanager') && (
+      {/* 二维码生成器插件 */}
+      {pluginId === 'qrcode.builtin' && (
+        <div className="p-6">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#A78BFA] mb-6">
+                <Icon name="qrcode" size={36} color="white" />
+              </div>
+              <h1 className="text-3xl font-bold mb-2">二维码生成器</h1>
+              <p className="text-white/50">快速生成二维码，支持一键复制到剪贴板</p>
+              <p className="text-sm text-white/30 mt-2">v1.0.0 · by LTools</p>
+            </div>
+            <QrcodeWidget />
+          </div>
+        </div>
+      )}
+
+      {/* Hosts 管理器插件 */}
+      {pluginId === 'hosts.builtin' && (
+        <div className="p-6">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#A78BFA] mb-6">
+                <Icon name="server" size={36} color="white" />
+              </div>
+              <h1 className="text-3xl font-bold mb-2">Hosts 管理器</h1>
+              <p className="text-white/50">场景化 hosts 文件切换工具</p>
+              <p className="text-sm text-white/30 mt-2">v1.0.0 · by LTools</p>
+            </div>
+            <HostsWidget />
+          </div>
+        </div>
+      )}
+
+      {/* 日期时间插件 */}
+      {pluginId === 'datetime.builtin' && (
+        <div className="p-8">
+          <div className="max-w-2xl mx-auto">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#A78BFA] mb-4">
+                <Icon name="clock" size={28} color="white" />
+              </div>
+              <h1 className="text-3xl font-bold mb-2">日期时间插件</h1>
+              <p className="text-white/50">实时显示当前时间和日期</p>
+              <p className="text-sm text-white/30 mt-2">v1.0.0 · by LTools</p>
+            </div>
+            <div className="space-y-8">
+              <DateTimeWidget />
+              <TimestampConverter />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 截图插件 */}
+      {pluginId === 'screenshot.builtin' && (
+        <div className="p-8">
+          <div className="max-w-2xl mx-auto">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#A78BFA] mb-4">
+                <Icon name="camera" size={28} color="white" />
+              </div>
+              <h1 className="text-3xl font-bold mb-2">截图工具</h1>
+              <p className="text-white/50">微信风格的屏幕截图和标注工具</p>
+              <p className="text-sm text-white/30 mt-2">v1.0.0 · by LTools</p>
+            </div>
+            <div className="space-y-8">
+              <ScreenshotWidget />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 密码生成器插件 */}
+      {pluginId === 'password.builtin' && (
+        <div className="p-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#A78BFA] mb-6">
+                <Icon name="key" size={36} color="white" />
+              </div>
+              <h1 className="text-3xl font-bold mb-2">随机密码生成器</h1>
+              <p className="text-white/50">生成安全的随机密码，支持自定义选项</p>
+              <p className="text-sm text-white/30 mt-2">v1.0.0 · by LTools</p>
+            </div>
+            <PasswordGeneratorWidget />
+          </div>
+        </div>
+      )}
+
+      {/* Tunnel 插件 */}
+      {pluginId === 'tunnel.builtin' && onBack && (
+        <div className="p-6">
+          <TunnelWidget onBack={onBack} />
+        </div>
+      )}
+
+      {/* 默认插件界面 - 排除已有专门界面的插件 */}
+      {!pluginId.startsWith('clipboard') && !pluginId.startsWith('sysinfo') && !pluginId.startsWith('calculator') && !pluginId.startsWith('jsoneditor') && !pluginId.startsWith('processmanager') && !pluginId.startsWith('qrcode') && !pluginId.startsWith('hosts') && !pluginId.startsWith('datetime') && !pluginId.startsWith('screenshot') && !pluginId.startsWith('password') && !pluginId.startsWith('tunnel') && (
         <div className="p-8">
           <div className="max-w-4xl mx-auto">
             {/* 插件页头 */}

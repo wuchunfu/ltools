@@ -391,3 +391,92 @@ func (s *ScreenshotService) Trigger() error {
 	debugLog("/tmp/screenshot-trigger.log", fmt.Sprintf("[ScreenshotService] StartCapture returned: result=%v, err=%v", result, err))
 	return err
 }
+
+// SaveImageWithDialog shows a system native save dialog and saves the image
+// This allows the user to choose where to save the file and what to name it
+func (s *ScreenshotService) SaveImageWithDialog() (string, error) {
+	imgData := s.plugin.GetCurrentImage()
+	if len(imgData) == 0 {
+		s.plugin.emitEvent("error", "no image to save")
+		return "", fmt.Errorf("no image to save")
+	}
+
+	// Get editor window from window service
+	var editorWindow *application.WebviewWindow
+	if s.windowService != nil {
+		editorWindow = s.windowService.GetEditorWindow()
+	}
+
+	// Create dialog options
+	options := SaveDialogOptions{
+		DefaultFilename: "", // Will be auto-generated
+		AllowedTypes:   []string{"png"},
+		Title:          "保存截图",
+		ParentWindow:   editorWindow,
+	}
+
+	// Show save dialog and save file
+	savedPath, err := s.plugin.GetStorage().SaveFileWithDialog(imgData, s.app, options)
+	if err != nil {
+		s.plugin.emitEvent("error", fmt.Sprintf("Save failed: %v", err))
+		return "", fmt.Errorf("failed to save image: %w", err)
+	}
+
+	s.plugin.emitEvent("saved", savedPath)
+	log.Printf("[ScreenshotService] Image saved to: %s", savedPath)
+
+	return savedPath, nil
+}
+
+// SaveImageWithDataWithDialog shows a system save dialog and saves the provided image data
+func (s *ScreenshotService) SaveImageWithDataWithDialog(imgData string) (string, error) {
+	log.Printf("[ScreenshotService] SaveImageWithDataWithDialog called, data length: %d", len(imgData))
+
+	if imgData == "" {
+		s.plugin.emitEvent("error", "no image data to save")
+		return "", fmt.Errorf("no image data to save")
+	}
+
+	// Parse base64 data URL
+	var pngData []byte
+	var err error
+
+	log.Printf("[ScreenshotService] Parsing image data...")
+
+	if strings.HasPrefix(imgData, "data:image/png;base64,") {
+		base64Str := strings.TrimPrefix(imgData, "data:image/png;base64,")
+		pngData, err = base64.StdEncoding.DecodeString(base64Str)
+		if err != nil {
+			return "", fmt.Errorf("failed to decode image data: %w", err)
+		}
+	} else {
+		// Assume it's already raw data
+		pngData = []byte(imgData)
+	}
+
+	// Get editor window from window service
+	var editorWindow *application.WebviewWindow
+	if s.windowService != nil {
+		editorWindow = s.windowService.GetEditorWindow()
+	}
+
+	// Create dialog options
+	options := SaveDialogOptions{
+		DefaultFilename: "", // Will be auto-generated
+		AllowedTypes:   []string{"png"},
+		Title:          "保存截图",
+		ParentWindow:   editorWindow,
+	}
+
+	// Show save dialog and save file
+	savedPath, err := s.plugin.GetStorage().SaveFileWithDialog(pngData, s.app, options)
+	if err != nil {
+		s.plugin.emitEvent("error", fmt.Sprintf("Save failed: %v", err))
+		return "", fmt.Errorf("failed to save image: %w", err)
+	}
+
+	s.plugin.emitEvent("saved", savedPath)
+	log.Printf("[ScreenshotService] Image saved to: %s", savedPath)
+
+	return savedPath, nil
+}

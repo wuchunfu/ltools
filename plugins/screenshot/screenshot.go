@@ -7,6 +7,7 @@ import (
 	"ltools/internal/plugins"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"ltools/internal/plugins/clipboard"
 )
 
 const (
@@ -22,7 +23,7 @@ type ScreenshotPlugin struct {
 	editorWindow *application.WebviewWindow
 	currentImage []byte
 	storage      *Storage
-	clipboard    *Clipboard
+	clipboard    *clipboard.ImageClipboard // Use shared clipboard module
 	tempDir      string
 }
 
@@ -70,8 +71,8 @@ func (p *ScreenshotPlugin) Init(app *application.App) error {
 	// Initialize storage
 	p.storage = NewStorage(p.tempDir)
 
-	// Initialize clipboard
-	p.clipboard = NewClipboard(app)
+	// Initialize clipboard using shared module
+	p.clipboard = clipboard.NewImageClipboard(app)
 
 	log.Printf("[Screenshot] Plugin initialized with temp dir: %s", p.tempDir)
 	return nil
@@ -128,7 +129,7 @@ func (p *ScreenshotPlugin) GetStorage() *Storage {
 }
 
 // GetClipboard returns the clipboard instance
-func (p *ScreenshotPlugin) GetClipboard() *Clipboard {
+func (p *ScreenshotPlugin) GetClipboard() *clipboard.ImageClipboard {
 	return p.clipboard
 }
 

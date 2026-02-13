@@ -5,6 +5,44 @@ import { ClipboardItem } from '../../bindings/ltools/plugins/clipboard/models';
 import { Icon } from './Icon';
 import { useToast } from '../hooks/useToast';
 
+// Image preview modal component
+interface ImagePreviewModalProps {
+  imageSrc: string;
+  onClose: () => void;
+}
+
+function ImagePreviewModal({ imageSrc, onClose }: ImagePreviewModalProps): JSX.Element {
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div className="relative max-w-[90vw] max-h-[90vh]">
+        <img
+          src={imageSrc}
+          alt="Preview"
+          className="max-w-full max-h-[90vh] rounded-lg shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        />
+        <button
+          className="absolute -top-10 right-0 p-2 text-white/60 hover:text-white transition-colors"
+          onClick={onClose}
+        >
+          <Icon name="x-mark" size={24} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * 剪贴板历史项组件
  */
@@ -12,21 +50,57 @@ interface ClipboardItemProps {
   item: ClipboardItem;
   index: number;
   onCopy: (content: string) => void;
+  onCopyImage: (base64Data: string) => void;
+  onSaveImage: (base64Data: string) => void;
   onDelete: (index: number) => void;
+  onPreviewImage: (src: string) => void;
 }
 
-function ClipboardHistoryItem({ item, index, onCopy, onDelete }: ClipboardItemProps): JSX.Element {
+function ClipboardHistoryItem({ item, index, onCopy, onCopyImage, onSaveImage, onDelete, onPreviewImage }: ClipboardItemProps): JSX.Element {
   const [copied, setCopied] = useState(false);
+  const [imageCopied, setImageCopied] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const { success, error: showError } = useToast();
 
   const handleCopy = async () => {
+    if (item.type === 'image') {
+      try {
+        await ClipboardService.CopyImageToClipboard(item.content);
+        setImageCopied(true);
+        onCopyImage(item.content);
+        success('图片已复制到剪贴板');
+        setTimeout(() => setImageCopied(false), 2000);
+      } catch (err) {
+        console.error('Failed to copy image:', err);
+        showError('复制图片失败');
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(item.content);
+        setCopied(true);
+        onCopy(item.content);
+        success('已复制到剪贴板');
+        setTimeout(() => setCopied(false), 2000);
+      } catch (err) {
+        console.error('Failed to copy:', err);
+        showError('复制失败');
+      }
+    }
+  };
+
+  const handleSaveImage = async () => {
     try {
-      await navigator.clipboard.writeText(item.content);
-      setCopied(true);
-      onCopy(item.content);
-      setTimeout(() => setCopied(false), 2000);
+      const timestamp = new Date().getTime();
+      const defaultFilename = `clipboard_image_${timestamp}.png`;
+      const filePath = await ClipboardService.SaveImageToFile(item.content, defaultFilename);
+      success(`图片已保存到: ${filePath}`);
+      onSaveImage(item.content);
     } catch (err) {
-      console.error('Failed to copy:', err);
+      console.error('Failed to save image:', err);
+      // User cancelled or error - don't show error for cancellation
+      if (err instanceof Error && !err.message.includes('cancelled')) {
+        showError('保存图片失败');
+      }
     }
   };
 
@@ -58,15 +132,47 @@ function ClipboardHistoryItem({ item, index, onCopy, onDelete }: ClipboardItemPr
 
   const getIconForType = (type: string) => {
     switch (type) {
+      case 'image':
+        return 'photo';
       case 'text':
       default:
-        return 'document';
+        return 'document-text';
     }
   };
 
   const truncateContent = (content: string, maxLength: number = 100) => {
     if (content.length <= maxLength) return content;
     return content.substring(0, maxLength) + '...';
+  };
+
+  const renderContent = () => {
+    if (item.type === 'image') {
+      return (
+        <div className="flex items-start gap-3">
+          <div
+            className="flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => onPreviewImage(item.content)}
+          >
+            <img
+              src={item.content}
+              alt="剪贴板图片"
+              className="max-h-24 max-w-32 rounded-lg object-contain bg-white/5"
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-white/40 mb-1">图片</p>
+            <p className="text-sm text-white/60 font-mono">
+              {truncateContent(item.content.substring(0, 50))}...
+            </p>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <p className="text-sm text-white/90 break-words font-mono">
+        {truncateContent(item.content)}
+      </p>
+    );
   };
 
   return (
@@ -87,9 +193,7 @@ function ClipboardHistoryItem({ item, index, onCopy, onDelete }: ClipboardItemPr
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 mb-2">
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-white/90 break-words font-mono">
-                {truncateContent(item.content)}
-              </p>
+              {renderContent()}
             </div>
             <span className="text-xs text-white/30 whitespace-nowrap">
               {formatTime(item.timestamp)}
@@ -100,14 +204,22 @@ function ClipboardHistoryItem({ item, index, onCopy, onDelete }: ClipboardItemPr
           <div className="flex items-center gap-2">
             <button
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 clickable ${
-                copied
+                copied || imageCopied
                   ? 'bg-[#22C55E]/20 text-[#22C55E] border border-[#22C55E]/20'
                   : 'bg-[#7C3AED]/10 text-[#A78BFA] hover:bg-[#7C3AED]/20 border border-[#7C3AED]/20'
               }`}
               onClick={handleCopy}
             >
-              {copied ? '已复制' : '复制'}
+              {copied || imageCopied ? '已复制' : (item.type === 'image' ? '复制图片' : '复制')}
             </button>
+            {item.type === 'image' && (
+              <button
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#3B82F6]/10 text-[#60A5FA] hover:bg-[#3B82F6]/20 border border-[#3B82F6]/20 transition-all duration-200 clickable"
+                onClick={handleSaveImage}
+              >
+                保存图片
+              </button>
+            )}
             <button
               className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 text-white/60 hover:bg-[#EF4444]/10 hover:text-[#EF4444] border border-white/10 transition-all duration-200 clickable"
               onClick={handleDelete}
@@ -150,6 +262,7 @@ export function ClipboardWidget(): JSX.Element {
   const [maxHistory, setMaxHistory] = useState(100);
   const [totalCount, setTotalCount] = useState(0);
   const [addingClipboard, setAddingClipboard] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // 加载剪贴板历史
   const loadHistory = async () => {
@@ -181,6 +294,10 @@ export function ClipboardWidget(): JSX.Element {
       loadHistory();
     });
 
+    const unsubImageNew = Events.On('clipboard:image:new', () => {
+      loadHistory();
+    });
+
     const unsubCleared = Events.On('clipboard:cleared', () => {
       setHistory([]);
       setFilteredHistory([]);
@@ -196,11 +313,17 @@ export function ClipboardWidget(): JSX.Element {
       loadHistory();
     });
 
+    const unsubImageSaved = Events.On('clipboard:image:saved', () => {
+      loadHistory();
+    });
+
     return () => {
       unsubNew?.();
+      unsubImageNew?.();
       unsubCleared?.();
       unsubCount?.();
       unsubDeleted?.();
+      unsubImageSaved?.();
     };
   }, []);
 
@@ -209,9 +332,15 @@ export function ClipboardWidget(): JSX.Element {
     if (!searchQuery.trim()) {
       setFilteredHistory(history);
     } else {
-      const filtered = history.filter(item =>
-        item.content.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      const query = searchQuery.toLowerCase();
+      const filtered = history.filter(item => {
+        // For text items, search in content
+        if (item.type !== 'image') {
+          return item.content.toLowerCase().includes(query);
+        }
+        // For images, only match if searching for "image" or "图片"
+        return query === 'image' || query === '图片' || query === 'img' || query === '图';
+      });
       setFilteredHistory(filtered);
     }
   }, [searchQuery, history]);
@@ -290,6 +419,14 @@ export function ClipboardWidget(): JSX.Element {
 
   return (
     <div className="space-y-6">
+      {/* Image Preview Modal */}
+      {previewImage && (
+        <ImagePreviewModal
+          imageSrc={previewImage}
+          onClose={() => setPreviewImage(null)}
+        />
+      )}
+
       {/* 页头 */}
       <div className="flex items-center justify-between">
         <div>
@@ -342,7 +479,7 @@ export function ClipboardWidget(): JSX.Element {
                 setFilteredHistory(history);
               }}
             >
-              <Icon name="x-circle" size={18} />
+              <Icon name="x-mark" size={18} />
             </button>
           )}
           <button
@@ -365,7 +502,10 @@ export function ClipboardWidget(): JSX.Element {
               item={item}
               index={index}
               onCopy={handleCopy}
+              onCopyImage={() => {}}
+              onSaveImage={() => {}}
               onDelete={handleDelete}
+              onPreviewImage={setPreviewImage}
             />
           ))}
         </div>

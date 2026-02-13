@@ -21,6 +21,8 @@ type ScreenshotWindowService struct {
 	isCapturing     bool
 	mu              sync.RWMutex
 	currentImageData []byte
+	// Track whether main window was hidden for proper recovery
+	mainWindowWasHidden bool
 }
 
 // NewScreenshotWindowService creates a new screenshot window service
@@ -57,6 +59,50 @@ func (s *ScreenshotWindowService) ServiceShutdown(app *application.App) error {
 	return nil
 }
 
+// ensureMainWindowShown ensures the main window is shown after an error
+// This is a helper for error recovery to prevent the app from being "stuck" with
+// no visible windows
+func (s *ScreenshotWindowService) ensureMainWindowShown() {
+	if s.mainWindow != nil && s.mainWindowWasHidden {
+		log.Printf("[ScreenshotWindowService] Error recovery: ensuring main window is shown")
+		s.mainWindow.Show()
+		s.mainWindowWasHidden = false
+	}
+}
+
+// hideMainWindowForCapture safely hides the main window for screenshot capture
+// Returns true if the window was successfully hidden, false otherwise
+func (s *ScreenshotWindowService) hideMainWindowForCapture() bool {
+	if s.mainWindow != nil {
+		log.Printf("[ScreenshotWindowService] Hiding main window for capture...")
+		s.mainWindow.Hide()
+		s.mainWindowWasHidden = true
+		return true
+	}
+	return false
+}
+
+// cleanupAfterError cleans up state after any error during capture
+func (s *ScreenshotWindowService) cleanupAfterError() {
+	log.Printf("[ScreenshotWindowService] Cleaning up after error...")
+
+	// Ensure main window is shown
+	s.ensureMainWindowShown()
+
+	// Reset capturing state
+	s.isCapturing = false
+
+	// Clear current image data to prevent stale data
+	s.currentImageData = nil
+
+	// Close editor window if it was partially created
+	if s.editorWindow != nil {
+		log.Printf("[ScreenshotWindowService] Closing editor window due to error...")
+		s.editorWindow.Close()
+		s.editorWindow = nil
+	}
+}
+
 // StartCapture starts the screenshot capture process
 func (s *ScreenshotWindowService) StartCapture() (string, error) {
 	s.mu.Lock()
@@ -65,20 +111,24 @@ func (s *ScreenshotWindowService) StartCapture() (string, error) {
 	log.Printf("[ScreenshotWindowService] Starting capture...")
 
 	// Hide main window before starting capture
-	if s.mainWindow != nil {
-		log.Printf("[ScreenshotWindowService] Hiding main window...")
-		s.mainWindow.Hide()
-	}
+	s.hideMainWindowForCapture()
+
+	// Ensure cleanup is called if this function returns an error
+	// We use a named return value to allow deferred error handling
+	var err error
+	defer func() {
+		if err != nil {
+			log.Printf("[ScreenshotWindowService] StartCapture failed, cleaning up: %v", err)
+			s.cleanupAfterError()
+			s.emitError(fmt.Sprintf("Capture failed: %v", err))
+		}
+	}()
 
 	// Capture the primary display
-	img, err := s.plugin.CaptureDisplay(0)
-	if err != nil {
-		s.emitError(fmt.Sprintf("Capture failed: %v", err))
-		// Show main window again on error
-		if s.mainWindow != nil {
-			s.mainWindow.Show()
-		}
-		return "", fmt.Errorf("failed to capture display: %w", err)
+	img, captureErr := s.plugin.CaptureDisplay(0)
+	if captureErr != nil {
+		err = fmt.Errorf("failed to capture display: %w", captureErr)
+		return "", err
 	}
 
 	// Store current image data
@@ -89,13 +139,9 @@ func (s *ScreenshotWindowService) StartCapture() (string, error) {
 		CompressionLevel: png.BestSpeed,
 	}
 
-	if err := encoder.Encode(&buf, img); err != nil {
-		s.emitError(fmt.Sprintf("Encoding failed: %v", err))
-		// Show main window again on error
-		if s.mainWindow != nil {
-			s.mainWindow.Show()
-		}
-		return "", fmt.Errorf("failed to encode image: %w", err)
+	if encodeErr := encoder.Encode(&buf, img); encodeErr != nil {
+		err = fmt.Errorf("failed to encode image: %w", encodeErr)
+		return "", err
 	}
 	s.currentImageData = buf.Bytes()
 
@@ -105,15 +151,12 @@ func (s *ScreenshotWindowService) StartCapture() (string, error) {
 
 	// Create and show editor window immediately
 	// We'll send image data right after to minimize black screen time
-	if err := s.createAndShowEditorWindow(base64Img); err != nil {
-		s.emitError(fmt.Sprintf("Failed to create editor: %v", err))
-		// Show main window again on error
-		if s.mainWindow != nil {
-			s.mainWindow.Show()
-		}
-		return "", fmt.Errorf("failed to create editor: %w", err)
+	if windowErr := s.createAndShowEditorWindow(base64Img); windowErr != nil {
+		err = fmt.Errorf("failed to create editor: %w", windowErr)
+		return "", err
 	}
 
+	// Success - mark as capturing (don't call cleanup in defer)
 	s.emitEvent("captured", "image captured")
 	s.isCapturing = true
 
@@ -190,40 +233,64 @@ func (s *ScreenshotWindowService) createAndShowEditorWindow(base64Img string) er
 	if s.editorWindow != nil {
 		// 窗口已存在，复用窗口但使用会话 ID 触发前端状态重置
 		log.Printf("[ScreenshotWindowService] Reusing existing window, generating new session...")
-		s.editorWindow.SetSize(width, height)
-		s.editorWindow.SetPosition(xPos, yPos)
-		s.editorWindow.Show()
-		s.editorWindow.Focus()
 
-		// 等待窗口完全显示
-		time.Sleep(100 * time.Millisecond)
-		_ = s.forceWindowToFrontNonMac()
-
-		// 等待前端加载
-		time.Sleep(200 * time.Millisecond)
-
-		// 生成新的会话 ID，用于触发前端状态重置
-		sessionId := fmt.Sprintf("screenshot-%d", time.Now().UnixMilli())
-		log.Printf("[ScreenshotWindowService] New session ID: %s", sessionId)
-
-		// 发送会话开始事件（包含会话 ID）
-		s.emitEvent("session-start", sessionId)
-
-		// 发送图片数据（包含会话 ID）
-		log.Printf("[ScreenshotWindowService] Sending image data with session...")
-		s.emitEvent("image-data", base64Img+"|"+sessionId)
-		log.Printf("[ScreenshotWindowService] Image data sent, size: %d bytes", len(base64Img))
-
-		s.emitEvent("started", "editor opened")
-		log.Printf("[ScreenshotWindowService] Editor window reused and shown successfully")
-
-		return nil
+		// 在复用窗口时也要进行错误检查
+		if err := s.reuseExistingEditorWindow(width, height, xPos, yPos, base64Img); err != nil {
+			log.Printf("[ScreenshotWindowService] Failed to reuse existing window: %v", err)
+			// 如果复用失败，尝试关闭旧窗口并创建新窗口
+			s.editorWindow.Close()
+			s.editorWindow = nil
+			// 继续执行下面的创建新窗口逻辑
+		} else {
+			s.emitEvent("started", "editor opened")
+			log.Printf("[ScreenshotWindowService] Editor window reused and shown successfully")
+			return nil
+		}
 	}
 
 	// 创建新窗口
 	log.Printf("[ScreenshotWindowService] Creating new fullscreen window...")
 
-	s.editorWindow = s.app.Window.NewWithOptions(application.WebviewWindowOptions{
+	return s.createNewEditorWindow(windowName, width, height, xPos, yPos, base64Img)
+}
+
+// reuseExistingEditorWindow reuses the existing editor window with a new session
+func (s *ScreenshotWindowService) reuseExistingEditorWindow(width, height, xPos, yPos int, base64Img string) error {
+	if s.editorWindow == nil {
+		return fmt.Errorf("editor window is nil")
+	}
+
+	// 更新窗口属性
+	s.editorWindow.SetSize(width, height)
+	s.editorWindow.SetPosition(xPos, yPos)
+	s.editorWindow.Show()
+	s.editorWindow.Focus()
+
+	// 等待窗口完全显示
+	time.Sleep(100 * time.Millisecond)
+	_ = s.forceWindowToFrontNonMac()
+
+	// 等待前端加载
+	time.Sleep(200 * time.Millisecond)
+
+	// 生成新的会话 ID，用于触发前端状态重置
+	sessionId := fmt.Sprintf("screenshot-%d", time.Now().UnixMilli())
+	log.Printf("[ScreenshotWindowService] New session ID: %s", sessionId)
+
+	// 发送会话开始事件（包含会话 ID）
+	s.emitEvent("session-start", sessionId)
+
+	// 发送图片数据（包含会话 ID）
+	log.Printf("[ScreenshotWindowService] Sending image data with session...")
+	s.emitEvent("image-data", base64Img+"|"+sessionId)
+	log.Printf("[ScreenshotWindowService] Image data sent, size: %d bytes", len(base64Img))
+
+	return nil
+}
+
+// createNewEditorWindow creates a new editor window
+func (s *ScreenshotWindowService) createNewEditorWindow(windowName string, width, height, xPos, yPos int, base64Img string) error {
+	newWindow := s.app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:        windowName,
 		Title:       "Screenshot Editor",
 		Width:       width,
@@ -238,12 +305,18 @@ func (s *ScreenshotWindowService) createAndShowEditorWindow(base64Img string) er
 				Hide: true,
 			},
 			Backdrop:           application.MacBackdropTransparent,
-			WindowLevel:        application.MacWindowLevelScreenSaver, // 使用最高窗口级别来覆盖菜单栏
+			// WindowLevel:        application.MacWindowLevelScreenSaver, // 使用最高窗口级别来覆盖菜单栏
 			CollectionBehavior: application.MacWindowCollectionBehaviorCanJoinAllSpaces, // 移除 FullScreenPrimary，避免与窗口级别冲突
 		},
 		URL: "/screenshot-editor",
 	})
 
+	// 检查窗口是否成功创建
+	if newWindow == nil {
+		return fmt.Errorf("failed to create editor window: returned nil")
+	}
+
+	s.editorWindow = newWindow
 	log.Printf("[ScreenshotWindowService] Window created, showing...")
 
 	// 显示窗口
@@ -298,15 +371,19 @@ func (s *ScreenshotWindowService) CloseEditor() error {
 	}
 
 	// Show main window again after hiding editor
-	if s.mainWindow != nil {
-		log.Printf("[ScreenshotWindowService] Showing main window...")
-		s.mainWindow.Show()
-	}
+	s.ensureMainWindowShown()
 
 	s.isCapturing = false
 	s.emitEvent("cancelled", "editor closed")
 
 	return nil
+}
+
+// GetEditorWindow returns the editor window reference
+func (s *ScreenshotWindowService) GetEditorWindow() *application.WebviewWindow {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.editorWindow
 }
 
 // Toggle toggles the screenshot editor window

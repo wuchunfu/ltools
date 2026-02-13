@@ -235,7 +235,7 @@ func (p *SysInfoPlugin) refreshPeriodically() {
 			p.emitEvent("cpu", fmt.Sprintf("%.1f", info.CPUUsage))
 			p.emitEvent("uptime", info.HostUptime)
 
-			fmt.Printf("[SysInfo] Updated: CPU=%.1f%%, Memory=%s\n", info.CPUUsage, info.MemoryUsed)
+			// fmt.Printf("[SysInfo] Updated: CPU=%.1f%%, Memory=%s\n", info.CPUUsage, info.MemoryUsed)
 		}
 	}
 }

@@ -15,10 +15,14 @@ import (
 	"ltools/plugins/calculator"
 	"ltools/plugins/clipboard"
 	"ltools/plugins/datetime"
+	"ltools/plugins/hosts"
 	"ltools/plugins/jsoneditor"
+	"ltools/plugins/password"
 	"ltools/plugins/processmanager"
+	"ltools/plugins/qrcode"
 	"ltools/plugins/screenshot"
 	"ltools/plugins/sysinfo"
+	"ltools/plugins/tunnel"
 )
 
 // Wails uses Go's `embed` package to embed the frontend files into the binary.
@@ -91,6 +95,40 @@ func init() {
 	application.RegisterEvent[string]("processmanager:updated")
 	application.RegisterEvent[string]("processmanager:killed")
 	application.RegisterEvent[string]("processmanager:error")
+
+	// Register custom events for qrcode plugin
+	application.RegisterEvent[string]("qrcode:generated")
+	application.RegisterEvent[string]("qrcode:copied")
+	application.RegisterEvent[string]("qrcode:saved")
+
+	// Register custom events for the hosts plugin
+	application.RegisterEvent[string]("hosts:scenario:created")
+	application.RegisterEvent[string]("hosts:scenario:updated")
+	application.RegisterEvent[string]("hosts:scenario:deleted")
+	application.RegisterEvent[string]("hosts:scenario:switched")
+	application.RegisterEvent[string]("hosts:backup:created")
+	application.RegisterEvent[string]("hosts:backup:restored")
+	application.RegisterEvent[string]("hosts:backup:deleted")
+	application.RegisterEvent[string]("hosts:entry:added")
+	application.RegisterEvent[string]("hosts:entry:updated")
+	application.RegisterEvent[string]("hosts:entry:removed")
+	application.RegisterEvent[string]("hosts:error")
+
+	// Register custom events for tunnel plugin
+	application.RegisterEvent[string]("tunnel:install:progress")
+	application.RegisterEvent[string]("tunnel:created")
+	application.RegisterEvent[string]("tunnel:updated")
+	application.RegisterEvent[string]("tunnel:deleted")
+	application.RegisterEvent[string]("tunnel:started")
+	application.RegisterEvent[string]("tunnel:stopped")
+	application.RegisterEvent[any]("tunnel:error")
+	application.RegisterEvent[string]("tunnel:restarting")
+	application.RegisterEvent[any]("tunnel:url")
+	application.RegisterEvent[any]("tunnel:log")
+	application.RegisterEvent[string]("tunnel:options:updated")
+
+	// Register notification event for user notifications
+	application.RegisterEvent[string]("notification:show")
 
 	// Register custom events for the search window service
 	application.RegisterEvent[string]("search:opened")
@@ -168,6 +206,12 @@ func main() {
 		log.Fatal("Failed to register datetime plugin:", err)
 	}
 
+	// Create and register password plugin
+	passwordPlugin := password.NewPasswordPlugin()
+	if err := pluginManager.Register(passwordPlugin); err != nil {
+		log.Fatal("Failed to register password plugin:", err)
+	}
+
 	// Create and register the calculator plugin
 	calculatorPlugin := calculator.NewCalculatorPlugin()
 	if err := pluginManager.Register(calculatorPlugin); err != nil {
@@ -214,6 +258,32 @@ func main() {
 		log.Printf("[Main] Failed to set data dir for app launcher: %v", err)
 	}
 
+	// Create and register qrcode plugin
+	qrcodePlugin := qrcode.NewQrcodePlugin()
+	if err := pluginManager.Register(qrcodePlugin); err != nil {
+		log.Fatal("Failed to register qrcode plugin:", err)
+	}
+
+	// Create and register hosts plugin
+	hostsPlugin := hosts.NewHostsPlugin()
+	if err := pluginManager.Register(hostsPlugin); err != nil {
+		log.Fatal("Failed to register hosts plugin:", err)
+	}
+	// Set data directory for hosts plugin
+	if err := hostsPlugin.SetDataDir(dataDir); err != nil {
+		log.Printf("[Main] Failed to set data dir for hosts plugin: %v", err)
+	}
+
+	// Create and register tunnel plugin
+	tunnelPlugin := tunnel.NewTunnelPlugin()
+	if err := pluginManager.Register(tunnelPlugin); err != nil {
+		log.Fatal("Failed to register tunnel plugin:", err)
+	}
+	// Set data directory for tunnel plugin
+	if err := tunnelPlugin.SetDataDir(dataDir); err != nil {
+		log.Printf("[Main] Failed to set data dir for tunnel plugin: %v", err)
+	}
+
 	// Start all enabled plugins - this calls ServiceStartup() on each enabled plugin
 	// This is crucial for plugins like clipboard that need to start background monitoring
 	if err := pluginManager.StartupAll(); err != nil {
@@ -225,6 +295,9 @@ func main() {
 
 	// Create datetime service to expose datetime functionality to frontend
 	datetimeService := datetime.NewDateTimeService(datetimePlugin)
+
+	// Create password service to expose password functionality to frontend
+	passwordService := password.NewPasswordService(passwordPlugin, app)
 
 	// Create calculator service to expose calculator functionality to frontend
 	calculatorService := calculator.NewCalculatorService(calculatorPlugin, app)
@@ -252,6 +325,15 @@ func main() {
 	// Create app launcher service to expose app launcher functionality to frontend
 	appLauncherService := applauncher.NewAppLauncherService(app, appLauncherPlugin)
 
+	// Create qrcode service to expose qrcode functionality to frontend
+	qrcodeService := qrcode.NewQrcodeService(qrcodePlugin, app)
+
+	// Create hosts service to expose hosts functionality to frontend
+	hostsService := hosts.NewHostsService(hostsPlugin, app, dataDir)
+
+	// Create tunnel service to expose tunnel functionality to frontend
+	tunnelService := tunnel.NewTunnelService(tunnelPlugin, app, dataDir)
+
 	// Create shortcut service to expose keyboard shortcut management to frontend
 	shortcutService, err := plugins.NewShortcutService(app, dataDir)
 	if err != nil {
@@ -266,6 +348,7 @@ func main() {
 	// Register services
 	app.RegisterService(application.NewService(pluginService))
 	app.RegisterService(application.NewService(datetimeService))
+	app.RegisterService(application.NewService(passwordService))
 	app.RegisterService(application.NewService(calculatorService))
 	app.RegisterService(application.NewService(clipboardService))
 	app.RegisterService(application.NewService(sysInfoService))
@@ -273,6 +356,9 @@ func main() {
 	app.RegisterService(application.NewService(processManagerService))
 	app.RegisterService(application.NewService(screenshotService))
 	app.RegisterService(application.NewService(appLauncherService))
+	app.RegisterService(application.NewService(qrcodeService))
+	app.RegisterService(application.NewService(hostsService))
+	app.RegisterService(application.NewService(tunnelService))
 	app.RegisterService(application.NewService(shortcutService))
 	app.RegisterService(application.NewService(searchWindowService))
 

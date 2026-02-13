@@ -2,6 +2,8 @@ package plugins
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -19,7 +21,7 @@ type SearchWindowService struct {
 	app                   *application.App
 	pluginService         *PluginService
 	shortcutService       *ShortcutService
-	appLauncherService    AppLauncherService
+	appLauncherService    AppLauncherService         `json:"-"` // Exclude from JSON serialization
 	searchWindow          *application.WebviewWindow
 	mainWindow            *application.WebviewWindow // 主窗口引用
 	isVisible             bool
@@ -41,8 +43,10 @@ type SearchResult struct {
 	Description   string   `json:"description"`
 	Icon          string   `json:"icon"`
 	MatchedFields []string `json:"matchedFields"` // Fields that matched the search query
-	Type          string   `json:"type"`          // "plugin" or "app"
-	AppID         string   `json:"appId,omitempty"` // For apps
+	Type          string   `json:"type"`          // "plugin", "app", or "file"
+	AppID         string   `json:"appId,omitempty"`   // For apps
+	Path          string   `json:"path,omitempty"`    // For file/directory paths
+	IsDirectory   bool     `json:"isDirectory,omitempty"` // Whether the path is a directory
 }
 
 // NewSearchWindowService creates a new search window service
@@ -171,7 +175,38 @@ func (s *SearchWindowService) Search(query string) ([]*SearchResult, error) {
 
 	results := make([]*SearchResult, 0)
 
-	// 1. 搜索插件
+	// 1. 先检测文件/目录路径（优先级最高）
+	pathInfo := DetectPath(query)
+	if pathInfo.IsValid && pathInfo.Exists {
+		if pathInfo.IsDirectory {
+			// 如果是目录，首先添加目录本身作为第一个结果
+			pathResult, err := s.SearchPath(query)
+			if err == nil && pathResult != nil {
+				results = append(results, pathResult)
+			}
+
+			// 然后列出目录内容
+			dirItems, err := s.ListDirectory(query)
+			if err == nil && len(dirItems) > 0 {
+				results = append(results, dirItems...)
+				s.app.Logger.Info(fmt.Sprintf("[SearchWindowService] Listed %d directory items (plus directory itself)", len(dirItems)))
+				return results, nil
+			}
+
+			// 如果列目录失败，至少返回目录本身
+			if len(results) > 0 {
+				return results, nil
+			}
+		} else {
+			// 如果是文件，返回文件本身的结果
+			pathResult, err := s.SearchPath(query)
+			if err == nil && pathResult != nil {
+				return []*SearchResult{pathResult}, nil
+			}
+		}
+	}
+
+	// 2. 搜索插件（仅当没有路径匹配时）
 	plugins := s.pluginService.List()
 	for _, plugin := range plugins {
 		// Skip disabled plugins
@@ -241,13 +276,15 @@ func (s *SearchWindowService) OpenApp(appID string) error {
 	return s.Hide()
 }
 
-// OpenItem 根据类型打开插件或应用（统一接口）
+// OpenItem 根据类型打开插件、应用或文件路径（统一接口）
 func (s *SearchWindowService) OpenItem(resultType, id string) error {
 	switch resultType {
 	case "plugin":
 		return s.OpenPlugin(id)
 	case "app":
 		return s.OpenApp(id)
+	case "file":
+		return s.OpenPath(id)
 	default:
 		return fmt.Errorf("unknown result type: %s", resultType)
 	}
@@ -333,4 +370,234 @@ func (s *SearchWindowService) createWindow() error {
 
 	s.app.Logger.Info("[SearchWindowService] Search window created")
 	return nil
+}
+
+// SearchPath 检测并返回文件/目录路径搜索结果
+func (s *SearchWindowService) SearchPath(query string) (*SearchResult, error) {
+	pathInfo := DetectPath(query)
+
+	if !pathInfo.IsValid {
+		return nil, nil // 不是有效路径，返回 nil 而不是错误
+	}
+
+	// 构建描述信息
+	var description string
+	if pathInfo.Exists {
+		if pathInfo.IsDirectory {
+			description = "文件夹"
+		} else {
+			description = "文件"
+		}
+		// 添加完整路径到描述
+		description += " • " + pathInfo.ResolvedPath
+	} else {
+		description = "路径不存在 • " + pathInfo.ResolvedPath
+	}
+
+	return &SearchResult{
+		Name:          pathInfo.OriginalInput,
+		Description:   description,
+		Icon:          s.getFileIcon(pathInfo.ResolvedPath, pathInfo.IsDirectory),
+		Type:          "file",
+		Path:          pathInfo.ResolvedPath,
+		IsDirectory:   pathInfo.IsDirectory,
+	}, nil
+}
+
+// getFileIcon 根据文件类型返回对应图标
+func (s *SearchWindowService) getFileIcon(path string, isDir bool) string {
+	if isDir {
+		return "📁"
+	}
+
+	// 根据文件扩展名返回图标
+	ext := GetFileExtension(path)
+	iconMap := map[string]string{
+		// 代码文件
+		"go":   "🐹",
+		"js":   "📜",
+		"ts":   "📘",
+		"tsx":  "⚛️",
+		"jsx":  "⚛️",
+		"py":   "🐍",
+		"rs":   "🦀",
+		"c":    "©️",
+		"cpp":  "©️",
+		"h":    "📄",
+		"java": "☕",
+		"kt":   "🎯",
+		"swift": "🍎",
+
+		// 配置文件
+		"json": "📋",
+		"yaml": "📋",
+		"yml":  "📋",
+		"xml":  "📋",
+		"toml": "📋",
+		"ini":  "📋",
+
+		// 样式文件
+		"css":  "🎨",
+		"scss": "🎨",
+		"less": "🎨",
+
+		// 文档文件
+		"md":   "📝",
+		"txt":  "📄",
+		"pdf":  "📕",
+		"doc":  "📘",
+		"docx": "📘",
+		"xls":  "📗",
+		"xlsx": "📗",
+		"ppt":  "📙",
+		"pptx": "📙",
+
+		// 图片文件
+		"png":  "🖼️",
+		"jpg":  "🖼️",
+		"jpeg": "🖼️",
+		"gif":  "🖼️",
+		"svg":  "🖼️",
+		"webp": "🖼️",
+		"ico":  "🖼️",
+
+		// 音视频文件
+		"mp3":  "🎵",
+		"wav":  "🎵",
+		"flac": "🎵",
+		"mp4":  "🎬",
+		"mov":  "🎬",
+		"avi":  "🎬",
+		"mkv":  "🎬",
+		"webm": "🎬",
+
+		// 压缩文件
+		"zip":  "📦",
+		"tar":  "📦",
+		"gz":   "📦",
+		"rar":  "📦",
+		"7z":   "📦",
+
+		// 其他常见文件
+		"exe":  "⚙️",
+		"dll":  "🔧",
+		"so":   "🔧",
+		"dylib": "🔧",
+	}
+
+	if icon, ok := iconMap[ext]; ok {
+		return icon
+	}
+
+	return "📄" // 默认文件图标
+}
+
+// OpenPath 打开文件或目录
+func (s *SearchWindowService) OpenPath(path string) error {
+	s.app.Logger.Info(fmt.Sprintf("[SearchWindowService] Opening path: %s", path))
+
+	if err := OpenPathWithDefaultApp(path); err != nil {
+		s.app.Logger.Error(fmt.Sprintf("[SearchWindowService] Failed to open path: %v", err))
+		return fmt.Errorf("failed to open path: %w", err)
+	}
+
+	// Hide the search window after opening
+	return s.Hide()
+}
+
+// ListDirectory 列出目录下的内容
+func (s *SearchWindowService) ListDirectory(dirPath string) ([]*SearchResult, error) {
+	s.app.Logger.Info(fmt.Sprintf("[SearchWindowService] Listing directory: %s", dirPath))
+
+	pathInfo := DetectPath(dirPath)
+	if !pathInfo.IsValid || !pathInfo.Exists || !pathInfo.IsDirectory {
+		return nil, fmt.Errorf("invalid directory path: %s", dirPath)
+	}
+
+	// 读取目录内容
+	entries, err := os.ReadDir(pathInfo.ResolvedPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory: %w", err)
+	}
+
+	results := make([]*SearchResult, 0, len(entries))
+
+	for _, entry := range entries {
+		// 跳过隐藏文件/目录
+		if len(entry.Name()) > 0 && entry.Name()[0] == '.' {
+			continue
+		}
+
+		fullPath := filepath.Join(pathInfo.ResolvedPath, entry.Name())
+		isDir := entry.IsDir()
+
+		// 构建描述信息
+		description := ""
+		if isDir {
+			description = "文件夹"
+		} else {
+			// 显示文件大小
+			info, _ := entry.Info()
+			if info != nil {
+				size := info.Size()
+				description = formatFileSize(size)
+			}
+		}
+
+		results = append(results, &SearchResult{
+			Name:        entry.Name(),
+			Description: description,
+			Icon:        s.getFileIcon(entry.Name(), isDir),
+			Type:        "file",
+			Path:        fullPath,
+			IsDirectory: isDir,
+		})
+	}
+
+	// 按类型和名称排序：目录在前，然后按名称排序
+	for i := 0; i < len(results); i++ {
+		for j := i + 1; j < len(results); j++ {
+			// 目录优先
+			if results[i].IsDirectory && !results[j].IsDirectory {
+				continue
+			}
+			if !results[i].IsDirectory && results[j].IsDirectory {
+				results[i], results[j] = results[j], results[i]
+				continue
+			}
+			// 同类型按名称排序
+			if toLower(results[i].Name) > toLower(results[j].Name) {
+				results[i], results[j] = results[j], results[i]
+			}
+		}
+	}
+
+	// 限制返回数量，避免结果过多
+	const maxResults = 50
+	if len(results) > maxResults {
+		results = results[:maxResults]
+	}
+
+	s.app.Logger.Info(fmt.Sprintf("[SearchWindowService] Listed %d items from directory", len(results)))
+	return results, nil
+}
+
+// formatFileSize 格式化文件大小
+func formatFileSize(bytes int64) string {
+	const (
+		KB = 1024
+		MB = KB * 1024
+		GB = MB * 1024
+	)
+
+	switch {
+	case bytes >= GB:
+		return fmt.Sprintf("%.1f GB", float64(bytes)/float64(GB))
+	case bytes >= MB:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(MB))
+	case bytes >= KB:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(KB))
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
 }

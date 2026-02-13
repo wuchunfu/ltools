@@ -13,20 +13,22 @@ import (
 var debugLog *os.File
 
 func init() {
-	var err error
-	debugLog, err = os.OpenFile("/tmp/gohook_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to open debug log: %v\n", err)
-	}
+	// var err error
+	// debugLog, err = os.OpenFile("/tmp/gohook_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	// if err != nil {
+	// 	fmt.Fprintf(os.Stderr, "Failed to open debug log: %v\n", err)
+	// }
+	debugLog = nil // Disable debug logging
 }
 
 func debugLogPrintf(format string, v ...interface{}) {
-	if debugLog != nil {
-		debugLog.WriteString(fmt.Sprintf(format+"\n", v...))
-		debugLog.Sync()
-	}
+	// Debug logging disabled
+	// if debugLog != nil {
+	// 	debugLog.WriteString(fmt.Sprintf(format+"\n", v...))
+	// 	debugLog.Sync()
+	// }
 	// Also output to stderr
-	fmt.Fprintf(os.Stderr, format+"\n", v...)
+	// fmt.Fprintf(os.Stderr, format+"\n", v...)
 }
 
 // GlobalHotkeyManager using robotn/gohook library
@@ -79,7 +81,7 @@ func (m *GlobalHotkeyManager) Register(keyCombo, pluginID string) error {
 	m.registeredHotkeys[normalizedKeyCombo] = pluginID
 	m.hotkeyMap[normalizedKeyCombo] = pluginID
 
-	debugLogPrintf("[GlobalHotkeyManager] Registered hotkey: %s -> %s", normalizedKeyCombo, pluginID)
+	// debugLogPrintf("[GlobalHotkeyManager] Registered hotkey: %s -> %s", normalizedKeyCombo, pluginID)
 	return nil
 }
 
@@ -97,7 +99,7 @@ func (m *GlobalHotkeyManager) Unregister(keyCombo string) error {
 	delete(m.registeredHotkeys, normalizedKeyCombo)
 	delete(m.hotkeyMap, normalizedKeyCombo)
 
-	debugLogPrintf("[GlobalHotkeyManager] Unregistered hotkey: %s", normalizedKeyCombo)
+	// debugLogPrintf("[GlobalHotkeyManager] Unregistered hotkey: %s", normalizedKeyCombo)
 	return nil
 }
 
@@ -111,18 +113,18 @@ func (m *GlobalHotkeyManager) SetCallback(callback func(pluginID string)) {
 // Start begins listening for global hotkeys
 // This should be called after all hotkeys are registered
 func (m *GlobalHotkeyManager) Start() error {
-	debugLogPrintf("[GlobalHotkeyManager] Start() method called")
+	// debugLogPrintf("[GlobalHotkeyManager] Start() method called")
 
 	m.mu.Lock()
 	if m.started {
 		m.mu.Unlock()
-		debugLogPrintf("[GlobalHotkeyManager] Already started, returning")
+		// debugLogPrintf("[GlobalHotkeyManager] Already started, returning")
 		return fmt.Errorf("hotkey manager already started")
 	}
 	m.started = true
 	m.mu.Unlock()
 
-	debugLogPrintf("[GlobalHotkeyManager] About to call hook.Start()...")
+	// debugLogPrintf("[GlobalHotkeyManager] About to call hook.Start()...")
 
 	// Start the event loop - hook.Start() returns a channel of events
 	m.evChan = hook.Start()
@@ -137,7 +139,7 @@ func (m *GlobalHotkeyManager) Start() error {
 	// Process events in a separate goroutine
 	go m.processEvents()
 
-	debugLogPrintf("[GlobalHotkeyManager] Global hotkey listener started")
+	// debugLogPrintf("[GlobalHotkeyManager] Global hotkey listener started")
 	return nil
 }
 
@@ -150,7 +152,7 @@ func (m *GlobalHotkeyManager) Stop() {
 		return
 	}
 
-	debugLogPrintf("[GlobalHotkeyManager] Stopping global hotkey listener...")
+	// debugLogPrintf("[GlobalHotkeyManager] Stopping global hotkey listener...")
 
 	close(m.stopChan)
 
@@ -160,7 +162,7 @@ func (m *GlobalHotkeyManager) Stop() {
 	}
 
 	m.started = false
-	debugLogPrintf("[GlobalHotkeyManager] Global hotkey listener stopped")
+	// debugLogPrintf("[GlobalHotkeyManager] Global hotkey listener stopped")
 }
 
 // processEvents processes events from the hook channel
@@ -187,8 +189,8 @@ func (m *GlobalHotkeyManager) handleKeyDown(event hook.Event) {
 
 	// Debug: log all key events with all available info
 	keyName := m.getKeyName(event)
-	debugLogPrintf("[GlobalHotkeyManager] KeyDown: keycode=%d rawcode=%d keychar='%c'(%d) keyName='%s' [V2]",
-		event.Keycode, event.Rawcode, event.Keychar, event.Keychar, keyName)
+	// debugLogPrintf("[GlobalHotkeyManager] KeyDown: keycode=%d rawcode=%d keychar='%c'(%d) keyName='%s' [V2]",
+	// 	event.Keycode, event.Rawcode, event.Keychar, event.Keychar, keyName)
 
 	// Track key state - only use getKeyName for consistency
 	if keyName != "" {
@@ -196,14 +198,14 @@ func (m *GlobalHotkeyManager) handleKeyDown(event hook.Event) {
 	}
 
 	// Log current key state for debugging
-	if keyName != "" {
-		debugLogPrintf("[GlobalHotkeyManager] Current key state: %+v", m.keyState)
-	}
+	// if keyName != "" {
+	// 	debugLogPrintf("[GlobalHotkeyManager] Current key state: %+v", m.keyState)
+	// }
 
 	// Check if any hotkey combo matches
 	for keyCombo, pluginID := range m.registeredHotkeys {
 		if m.matchesHotkey(keyCombo) {
-			debugLogPrintf("[GlobalHotkeyManager] *** HOTKEY TRIGGERED: %s -> %s ***", keyCombo, pluginID)
+			// debugLogPrintf("[GlobalHotkeyManager] *** HOTKEY TRIGGERED: %s -> %s ***", keyCombo, pluginID)
 
 			// Call the callback in a goroutine to avoid blocking
 			if m.onHotkeyTriggered != nil {
@@ -226,7 +228,7 @@ func (m *GlobalHotkeyManager) handleKeyUp(event hook.Event) {
 		m.keyState[keyName] = false
 	}
 
-	debugLogPrintf("[GlobalHotkeyManager] KeyUp: keyName='%s'", keyName)
+	// debugLogPrintf("[GlobalHotkeyManager] KeyUp: keyName='%s'", keyName)
 }
 
 // matchesHotkey checks if the current key state matches a hotkey combo
@@ -234,18 +236,18 @@ func (m *GlobalHotkeyManager) matchesHotkey(keyCombo string) bool {
 	parts := splitKeyCombo(keyCombo)
 
 	// Debug: log the matching attempt
-	debugLogPrintf("[GlobalHotkeyManager] matchesHotkey: checking '%s', parts=%+v, keyState=%+v", keyCombo, parts, m.keyState)
+	// debugLogPrintf("[GlobalHotkeyManager] matchesHotkey: checking '%s', parts=%+v, keyState=%+v", keyCombo, parts, m.keyState)
 
 	// Check if all keys in the combo are currently pressed
 	for _, part := range parts {
 		normalized := toLower(part)
 		if !m.keyState[normalized] {
-			debugLogPrintf("[GlobalHotkeyManager] matchesHotkey: '%s' failed - key '%s' not pressed (state=%v)", keyCombo, normalized, m.keyState[normalized])
+			// debugLogPrintf("[GlobalHotkeyManager] matchesHotkey: '%s' failed - key '%s' not pressed (state=%v)", keyCombo, normalized, m.keyState[normalized])
 			return false
 		}
 	}
 
-	debugLogPrintf("[GlobalHotkeyManager] matchesHotkey: '%s' MATCHED!", keyCombo)
+	// debugLogPrintf("[GlobalHotkeyManager] matchesHotkey: '%s' MATCHED!", keyCombo)
 	return true
 }
 

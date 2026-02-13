@@ -41,8 +41,8 @@ func NewAppLauncherPlugin() *AppLauncherPlugin {
 			plugins.PermissionProcess,    // 启动进程
 		},
 		Keywords: []string{"app", "应用", "启动", "launch", "open"},
-		ShowInMenu: false, // 不在菜单中显示，通过快捷键/搜索调用
-		HasPage:    false, // 无需独立页面
+		ShowInMenu: plugins.BoolPtr(false), // 不在菜单中显示，通过快捷键/搜索调用
+		HasPage:    plugins.BoolPtr(false), // 无需独立页面
 	}
 
 	base := plugins.NewBasePlugin(metadata)
@@ -91,13 +91,13 @@ func (p *AppLauncherPlugin) SetDataDir(dataDir string) error {
 
 // ServiceStartup 服务启动时调用
 func (p *AppLauncherPlugin) ServiceStartup(app *application.App) error {
-	app.Logger.Info("[AppLauncher] Service starting...")
+	// app.Logger.Info("[AppLauncher] Service starting...")
 	return p.BasePlugin.ServiceStartup(app)
 }
 
 // ServiceShutdown 服务关闭时调用
 func (p *AppLauncherPlugin) ServiceShutdown(app *application.App) error {
-	app.Logger.Info("[AppLauncher] Service shutting down...")
+	// app.Logger.Info("[AppLauncher] Service shutting down...")
 	return p.BasePlugin.ServiceShutdown(app)
 }
 
@@ -190,11 +190,11 @@ func (p *AppLauncherPlugin) refreshApps() error {
 			iconData, err := apps.ExtractIcon(app.IconPath)
 			if err == nil && iconData != "" {
 				app.IconData = iconData
-				p.app.Logger.Info(fmt.Sprintf("[AppLauncher] Extracted icon for: %s", app.Name))
+				// p.app.Logger.Info(fmt.Sprintf("[AppLauncher] Extracted icon for: %s", app.Name))
 			} else {
 				// 图标提取失败，使用默认 emoji 图标
 				app.IconData = apps.GetAppDefaultIcon(app.Name)
-				p.app.Logger.Debug(fmt.Sprintf("[AppLauncher] Using default icon for %s: %v", app.Name, err))
+				// p.app.Logger.Debug(fmt.Sprintf("[AppLauncher] Using default icon for %s: %v", app.Name, err))
 			}
 		} else if app.IconData == "" {
 			// 没有图标路径，使用默认图标
@@ -207,7 +207,7 @@ func (p *AppLauncherPlugin) refreshApps() error {
 		return err
 	}
 
-	p.app.Logger.Info(fmt.Sprintf("[AppLauncher] Refreshed %d apps", len(appList)))
+	// p.app.Logger.Info(fmt.Sprintf("[AppLauncher] Refreshed %d apps", len(appList)))
 	return nil
 }
 
