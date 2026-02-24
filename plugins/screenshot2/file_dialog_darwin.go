@@ -1,6 +1,6 @@
-//go:build linux
+//go:build darwin
 
-package screenshot
+package screenshot2
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -18,17 +19,14 @@ func (s *Storage) SaveFileWithDialog(imgData []byte, app *application.App, optio
 		return "", &InvalidImageError{}
 	}
 
-	// Set default options if not provided
 	if options.DefaultFilename == "" {
 		options.DefaultFilename = s.GenerateFilename()
-		log.Printf("[Screenshot] Generated default filename: %s", options.DefaultFilename)
 	}
 
 	if options.Title == "" {
 		options.Title = "保存截图"
 	}
 
-	// Set default directory
 	defaultDir := options.DefaultDir
 	if defaultDir == "" {
 		defaultDir = s.saveDir
@@ -38,14 +36,23 @@ func (s *Storage) SaveFileWithDialog(imgData []byte, app *application.App, optio
 		}
 	}
 
-	log.Printf("[Screenshot] Showing Wails v3 save dialog: filename=%s, dir=%s", options.DefaultFilename, defaultDir)
+	log.Printf("[Screenshot2] Showing save dialog: filename=%s, dir=%s", options.DefaultFilename, defaultDir)
+
+	// Hide parent window before showing dialog
+	var parentWindow *application.WebviewWindow
+	if options.ParentWindow != nil {
+		if win, ok := options.ParentWindow.(*application.WebviewWindow); ok {
+			parentWindow = win
+			parentWindow.Hide()
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
 
 	// Build dialog using Wails v3 native API
 	dialogBuilder := app.Dialog.SaveFile().
 		SetMessage(options.Title).
 		SetFilename(options.DefaultFilename)
 
-	// Add filters for allowed types
 	if len(options.AllowedTypes) > 0 {
 		for _, ext := range options.AllowedTypes {
 			dialogBuilder.AddFilter("图片文件", "*."+ext)
@@ -53,17 +60,19 @@ func (s *Storage) SaveFileWithDialog(imgData []byte, app *application.App, optio
 		dialogBuilder.AddFilter("所有文件", "*.*")
 	}
 
-	// Set default directory
 	if defaultDir != "" {
 		dialogBuilder = dialogBuilder.SetDirectory(defaultDir)
 	}
 
-	// Show the dialog
 	savePath, err := dialogBuilder.PromptForSingleSelection()
 
+	// Restore parent window after dialog closes
+	if parentWindow != nil {
+		parentWindow.Show()
+		time.Sleep(100 * time.Millisecond)
+	}
+
 	if err != nil {
-		log.Printf("[Screenshot] Save dialog error: %v", err)
-		// Check if user cancelled
 		if strings.Contains(err.Error(), "cancelled") || savePath == "" {
 			return "", fmt.Errorf("user cancelled save")
 		}
@@ -71,7 +80,6 @@ func (s *Storage) SaveFileWithDialog(imgData []byte, app *application.App, optio
 	}
 
 	if savePath == "" {
-		log.Printf("[Screenshot] User cancelled save dialog")
 		return "", fmt.Errorf("user cancelled save")
 	}
 
@@ -89,17 +97,15 @@ func (s *Storage) SaveFileWithDialog(imgData []byte, app *application.App, optio
 		savePath = savePath + "." + options.AllowedTypes[0]
 	}
 
-	// Ensure directory exists
 	saveDir := filepath.Dir(savePath)
 	if err := os.MkdirAll(saveDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	// Write the file
 	if err := os.WriteFile(savePath, imgData, 0644); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 
-	log.Printf("[Screenshot] File saved to: %s", savePath)
+	log.Printf("[Screenshot2] File saved to: %s", savePath)
 	return savePath, nil
 }

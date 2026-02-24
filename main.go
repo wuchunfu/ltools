@@ -20,7 +20,7 @@ import (
 	"ltools/plugins/password"
 	"ltools/plugins/processmanager"
 	"ltools/plugins/qrcode"
-	"ltools/plugins/screenshot"
+	"ltools/plugins/screenshot2"
 	"ltools/plugins/sysinfo"
 	"ltools/plugins/tunnel"
 )
@@ -78,13 +78,17 @@ func init() {
 	// Note: Wails v3 events need a specific type, so we'll use string for the data
 	application.RegisterEvent[string]("shortcut:permission-required")
 
-	// Register custom events for the screenshot plugin
-	application.RegisterEvent[string]("screenshot:started")
-	application.RegisterEvent[string]("screenshot:captured")
-	application.RegisterEvent[string]("screenshot:saved")
-	application.RegisterEvent[string]("screenshot:copied")
-	application.RegisterEvent[string]("screenshot:cancelled")
-	application.RegisterEvent[string]("screenshot:error")
+	// Register custom events for the screenshot2 plugin (WeChat-style)
+	application.RegisterEvent[string]("screenshot2:started")
+	application.RegisterEvent[string]("screenshot2:captured")
+	application.RegisterEvent[string]("screenshot2:saved")
+	application.RegisterEvent[string]("screenshot2:copied")
+	application.RegisterEvent[string]("screenshot2:cancelled")
+	application.RegisterEvent[string]("screenshot2:error")
+	application.RegisterEvent[string]("screenshot2:session-start")
+	application.RegisterEvent[string]("screenshot2:session-end")
+	application.RegisterEvent[string]("screenshot2:image-data")
+	application.RegisterEvent[string]("screenshot2:displays-info")
 
 	// Register custom events for the JSON editor plugin
 	application.RegisterEvent[string]("jsoneditor:formatted")
@@ -242,10 +246,10 @@ func main() {
 		log.Fatal("Failed to register processmanager plugin:", err)
 	}
 
-	// Create and register the screenshot plugin
-	screenshotPlugin := screenshot.NewScreenshotPlugin()
-	if err := pluginManager.Register(screenshotPlugin); err != nil {
-		log.Fatal("Failed to register screenshot plugin:", err)
+	// Create and register the screenshot2 plugin (WeChat-style)
+	screenshot2Plugin := screenshot2.NewScreenshot2Plugin()
+	if err := pluginManager.Register(screenshot2Plugin); err != nil {
+		log.Fatal("Failed to register screenshot2 plugin:", err)
 	}
 
 	// Create and register the app launcher plugin
@@ -314,13 +318,13 @@ func main() {
 	// Create process manager service to expose process manager functionality to frontend
 	processManagerService := processmanager.NewProcessManagerService(processManagerPlugin, app)
 
-	// Create screenshot window service (manages independent screenshot editor window)
-	screenshotWindowService := screenshot.NewScreenshotWindowService(screenshotPlugin, app)
+	// Create screenshot2 window manager (WeChat-style multi-window)
+	screenshot2WindowManager := screenshot2.NewWindowManager(screenshot2Plugin, app)
 
-	// Create screenshot service to expose screenshot functionality to frontend (for plugin info)
-	screenshotService := screenshot.NewScreenshotService(screenshotPlugin, app)
-	// Set window service reference so frontend can trigger screenshots
-	screenshotService.SetWindowService(screenshotWindowService)
+	// Create screenshot2 service to expose screenshot2 functionality to frontend
+	screenshot2Service := screenshot2.NewScreenshot2Service(screenshot2Plugin, app)
+	// Set window manager reference
+	screenshot2Service.SetWindowManager(screenshot2WindowManager)
 
 	// Create app launcher service to expose app launcher functionality to frontend
 	appLauncherService := applauncher.NewAppLauncherService(app, appLauncherPlugin)
@@ -354,7 +358,7 @@ func main() {
 	app.RegisterService(application.NewService(sysInfoService))
 	app.RegisterService(application.NewService(jsonEditorService))
 	app.RegisterService(application.NewService(processManagerService))
-	app.RegisterService(application.NewService(screenshotService))
+	app.RegisterService(application.NewService(screenshot2Service))
 	app.RegisterService(application.NewService(appLauncherService))
 	app.RegisterService(application.NewService(qrcodeService))
 	app.RegisterService(application.NewService(hostsService))
@@ -404,8 +408,13 @@ func main() {
 	// Set the main window reference in SearchWindowService so it can show the main window
 	searchWindowService.SetMainWindow(mainWindow)
 
-	// Set the main window reference in ScreenshotWindowService so it can hide/show the main window
-	screenshotWindowService.SetMainWindow(mainWindow)
+	// Set the main window reference in Screenshot2WindowManager
+	screenshot2WindowManager.SetMainWindow(mainWindow)
+
+	// Start the screenshot2 window manager
+	if err := screenshot2WindowManager.ServiceStartup(app); err != nil {
+		log.Printf("Failed to start screenshot2 window manager: %v", err)
+	}
 
 	// Register default search window hotkey (Cmd+5 / Ctrl+5)
 	// Using Cmd+5 which might work better with gohook
@@ -441,15 +450,10 @@ func main() {
 		screenshotHotkey = "ctrl+shift+s" // Windows/Linux
 	}
 
-	if err := shortcutService.SetShortcut(screenshotHotkey, "screenshot.window.builtin"); err != nil {
-		log.Printf("[Main] Failed to set screenshot hotkey %s: %v (may conflict with existing shortcut)", screenshotHotkey, err)
+	if err := shortcutService.SetShortcut(screenshotHotkey, "screenshot2.window.builtin"); err != nil {
+		log.Printf("[Main] Failed to set screenshot2 hotkey %s: %v (may conflict with existing shortcut)", screenshotHotkey, err)
 	} else {
-		log.Printf("[Main] Default screenshot hotkey registered: %s", screenshotHotkey)
-	}
-
-	// Start the screenshot window service
-	if err := screenshotWindowService.ServiceStartup(app); err != nil {
-		log.Printf("Failed to start screenshot window service: %v", err)
+		log.Printf("[Main] Default screenshot2 hotkey registered: %s", screenshotHotkey)
 	}
 
 	// Run the application. This blocks until the application has been exited.

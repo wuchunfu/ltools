@@ -1,0 +1,156 @@
+/* Screenshot2 Overlay 样式 */
+
+.screenshot2-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: transparent;
+  cursor: crosshair;
+  z-index: 9999;
+  user-select: none;
+}
+
+.screenshot2-overlay.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.8);
+  cursor: default;
+}
+
+.loading-text {
+  color: #fff;
+  font-size: 18px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.screenshot2-overlay canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 工具栏样式 */
+.screenshot2-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  background: rgba(30, 30, 30, 0.95);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 10000;
+}
+
+.screenshot2-toolbar button {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: background-color 0.15s ease;
+}
+
+.screenshot2-toolbar button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.screenshot2-toolbar button:active {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.screenshot2-toolbar button .icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 调试信息 */
+.debug-info {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #888;
+  font-size: 11px;
+  font-family: monospace;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* 选区边框动画 */
+@keyframes selection-border {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 8;
+  }
+}
+
+/* 手柄悬停效果 */
+.screenshot2-overlay canvas {
+  cursor: crosshair;
+}
+
+/* 选区移动时光标 */
+.screenshot2-overlay.move-mode canvas {
+  cursor: move;
+}
+
+/* 调整手柄时的光标 */
+.screenshot2-overlay.resize-nw canvas,
+.screenshot2-overlay.resize-se canvas {
+  cursor: nwse-resize;
+}
+
+.screenshot2-overlay.resize-ne canvas,
+.screenshot2-overlay.resize-sw canvas {
+  cursor: nesw-resize;
+}
+
+.screenshot2-overlay.resize-n canvas,
+.screenshot2-overlay.resize-s canvas {
+  cursor: ns-resize;
+}
+
+.screenshot2-overlay.resize-e canvas,
+.screenshot2-overlay.resize-w canvas {
+  cursor: ew-resize;
+}
+
+/* Toast 提示样式 */
+.screenshot2-toast {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 12px 24px;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  font-size: 16px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  z-index: 10001;
+  animation: toast-fade-in 0.3s ease;
+}
+
+@keyframes toast-fade-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}

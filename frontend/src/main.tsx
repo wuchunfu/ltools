@@ -2,8 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import { SearchWindow } from './components/SearchWindow'
-import ScreenshotEditor from './components/ScreenshotEditor'
-import { ToastProvider } from './contexts/ToastContext'
+import { Screenshot2Overlay } from './components/Screenshot2'
 import './styles.css'
 
 // Get the current path from window.location
@@ -11,13 +10,9 @@ const path = window.location.pathname
 
 // Render different components based on the path
 const renderApp = () => {
-  // Screenshot editor route
-  if (path === '/screenshot-editor') {
-    return (
-      <ToastProvider>
-        <ScreenshotEditor />
-      </ToastProvider>
-    )
+  // Screenshot2 overlay route (WeChat-style screenshot)
+  if (path === '/screenshot2-overlay') {
+    return <Screenshot2Overlay />
   }
 
   // Search window route

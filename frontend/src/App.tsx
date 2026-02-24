@@ -10,7 +10,7 @@ import { PasswordGeneratorWidget } from "./components/PasswordGeneratorWidget";
 import { QrcodeWidget } from "./components/QrcodeWidget";
 import { HostsWidget } from "./components/HostsWidget";
 import { TunnelWidget } from "./components/TunnelWidget";
-import { ScreenshotWidget } from "./components/ScreenshotWidget";
+import Screenshot2Widget from "./components/Screenshot2Widget";
 import { Settings } from "./components/Settings";
 import { Icon } from './components/Icon';
 import { ToastProvider } from './contexts/ToastContext';
@@ -21,7 +21,7 @@ import { Events } from '@wailsio/runtime';
 import * as ShortcutService from '../bindings/ltools/internal/plugins/shortcutservice';
 import * as SearchWindowService from '../bindings/ltools/internal/plugins/searchwindowservice';
 import * as ProcessManagerService from '../bindings/ltools/plugins/processmanager/processmanagerservice';
-import * as ScreenshotService from '../bindings/ltools/plugins/screenshot/screenshotservice';
+import * as Screenshot2Service from '../bindings/ltools/plugins/screenshot2/screenshot2service';
 
 /**
  * 导航项配置
@@ -108,13 +108,13 @@ function App() {
         return;
       }
 
-      // 跳过截图窗口快捷键（由独立窗口处理）
-      if (pluginId === 'screenshot.window.builtin') {
-        console.log('[App] Screenshot window shortcut triggered, calling Trigger()...');
-        // 触发截图，ScreenshotEditor 组件会自己处理全屏请求
-        ScreenshotService.Trigger()
+      // 截图快捷键（由独立窗口处理）
+      if (pluginId === 'screenshot2.window.builtin') {
+        console.log('[App] Screenshot2 window shortcut triggered, calling StartCapture()...');
+        // 触发截图，Screenshot2Overlay 组件会自己处理全屏请求
+        Screenshot2Service.StartCapture()
           .catch((error: any) => {
-            console.error('[App] Failed to trigger screenshot:', error);
+            console.error('[App] Failed to trigger screenshot2:', error);
           });
         return;
       }
@@ -239,7 +239,7 @@ function App() {
       'hosts.builtin': 'server',
       'tunnel.builtin': 'network',
       'datetime.builtin': 'clock',
-      'screenshot.builtin': 'camera',
+      'screenshot2.builtin': 'camera',
       'password.builtin': 'key',
     };
     return iconMap[pluginId] || 'puzzle-piece';
@@ -624,7 +624,7 @@ function PluginView({ pluginId, plugins, onBack }: PluginViewProps) {
       )}
 
       {/* 截图插件 */}
-      {pluginId === 'screenshot.builtin' && (
+      {pluginId === 'screenshot2.builtin' && (
         <div className="p-8">
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-8">
@@ -636,7 +636,7 @@ function PluginView({ pluginId, plugins, onBack }: PluginViewProps) {
               <p className="text-sm text-white/30 mt-2">v1.0.0 · by LTools</p>
             </div>
             <div className="space-y-8">
-              <ScreenshotWidget />
+              <Screenshot2Widget />
             </div>
           </div>
         </div>
