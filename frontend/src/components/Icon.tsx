@@ -72,7 +72,14 @@ export type IconName =
   | 'circle'
   | 'square'
   | 'tag'
-  | 'calendar';
+  | 'calendar'
+  // 截图标注工具
+  | 'rectangle'
+  | 'brush'
+  | 'mosaic'
+  | 'undo'
+  | 'redo'
+  | 'type';
 
 interface IconProps {
   name: IconName;
@@ -460,6 +467,7 @@ export function Icon({ name, size = 20, className = '', color = 'currentColor' }
         <line x1="12" y1="19" x2="20" y2="19" />
       </svg>
     ),
+    // 看板相关图标
     'view-columns': (
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
         <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -496,6 +504,52 @@ export function Icon({ name, size = 20, className = '', color = 'currentColor' }
         <line x1="16" y1="2" x2="16" y2="6" />
         <line x1="8" y1="2" x2="8" y2="6" />
         <line x1="3" y1="10" x2="21" y2="10" />
+      </svg>
+    ),
+    // 截图标注工具图标
+    rectangle: (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      </svg>
+    ),
+    brush: (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+        <path d="M12 19l7-7 3 3-7 7-3-3z" />
+        <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+        <path d="M2 2l7.586 7.586" />
+        <circle cx="11" cy="11" r="2" />
+      </svg>
+    ),
+    mosaic: (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+        <rect x="3" y="3" width="6" height="6" />
+        <rect x="9" y="3" width="6" height="6" />
+        <rect x="15" y="3" width="6" height="6" />
+        <rect x="3" y="9" width="6" height="6" />
+        <rect x="9" y="9" width="6" height="6" />
+        <rect x="15" y="9" width="6" height="6" />
+        <rect x="3" y="15" width="6" height="6" />
+        <rect x="9" y="15" width="6" height="6" />
+        <rect x="15" y="15" width="6" height="6" />
+      </svg>
+    ),
+    undo: (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+        <path d="M3 7v6h6" />
+        <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+      </svg>
+    ),
+    redo: (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+        <path d="M21 7v6h-6" />
+        <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" />
+      </svg>
+    ),
+    type: (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+        <polyline points="4 7 4 4 20 4 20 7" />
+        <line x1="9" y1="20" x2="15" y2="20" />
+        <line x1="12" y1="4" x2="12" y2="20" />
       </svg>
     ),
   };

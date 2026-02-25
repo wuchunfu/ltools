@@ -102,7 +102,19 @@ export function useAnnotation() {
         };
       }
 
-      // 对于矩形、椭圆、箭头等
+      // 对于箭头，保持方向性（允许负的 width/height）
+      if (ann.type === 'arrow') {
+        return {
+          ...prev,
+          currentAnnotation: {
+            ...ann,
+            width: x - ann.x,
+            height: y - ann.y,
+          },
+        };
+      }
+
+      // 对于矩形、椭圆等，使用绝对值
       return {
         ...prev,
         currentAnnotation: {
@@ -173,6 +185,29 @@ export function useAnnotation() {
     });
   }, []);
 
+  // 添加文字标注
+  const addTextAnnotation = useCallback((x: number, y: number, text: string) => {
+    const newAnnotation: Annotation = {
+      id: `ann-${Date.now()}`,
+      type: 'text',
+      x,
+      y,
+      text,
+      color: state.currentColor,
+      strokeWidth: state.strokeWidth,
+    };
+
+    // 保存到历史
+    historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    historyRef.current.push([...state.annotations, newAnnotation]);
+    historyIndexRef.current = historyRef.current.length - 1;
+
+    setState(prev => ({
+      ...prev,
+      annotations: [...prev.annotations, newAnnotation],
+    }));
+  }, [state.currentColor, state.strokeWidth, state.annotations]);
+
   return {
     annotations: state.annotations,
     currentType: state.currentType,
@@ -190,6 +225,7 @@ export function useAnnotation() {
     redo,
     clearAnnotations,
     deleteAnnotation,
+    addTextAnnotation,
     canUndo: historyIndexRef.current > 0,
     canRedo: historyIndexRef.current < historyRef.current.length - 1,
   };

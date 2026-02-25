@@ -23,14 +23,18 @@ type WindowManager struct {
 	wailsScreens         []*application.Screen // Wails 屏幕信息（正确的坐标系）
 	mouseMonitorStopChan chan struct{}         // 停止鼠标监控的信号
 	currentFocusDisplay  int                   // 当前聚焦的显示器索引
+	frontendReadyChan    chan int              // 等待前端就绪的 channel（传递 displayIndex）
+	expectedDisplays     int                   // 期望就绪的显示器数量
+	readyDisplays        int                   // 已就绪的显示器数量
 }
 
 // NewWindowManager creates a new window manager
 func NewWindowManager(plugin *Screenshot2Plugin, app *application.App) *WindowManager {
 	return &WindowManager{
-		app:     app,
-		plugin:  plugin,
-		windows: make(map[int]*application.WebviewWindow),
+		app:               app,
+		plugin:            plugin,
+		windows:           make(map[int]*application.WebviewWindow),
+		frontendReadyChan: make(chan int, 10), // 缓冲区足够大
 	}
 }
 
@@ -53,15 +57,69 @@ func (m *WindowManager) ServiceShutdown(app *application.App) error {
 	return nil
 }
 
+// OnFrontendReady 前端调用此方法通知已加载完成
+func (m *WindowManager) OnFrontendReady(displayIndex int) {
+	log.Printf("[WindowManager] Frontend ready for display %d", displayIndex)
+	select {
+	case m.frontendReadyChan <- displayIndex:
+	default:
+		log.Printf("[WindowManager] Frontend ready channel full, dropping notification for display %d", displayIndex)
+	}
+}
+
+// waitForFrontendReady 等待所有前端就绪，带超时
+func (m *WindowManager) waitForFrontendReady(expectedCount int, timeout time.Duration) bool {
+	m.readyDisplays = 0
+	m.expectedDisplays = expectedCount
+
+	deadline := time.Now().Add(timeout)
+	for m.readyDisplays < expectedCount {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			log.Printf("[WindowManager] Timeout waiting for frontend ready, got %d/%d", m.readyDisplays, expectedCount)
+			return false
+		}
+
+		select {
+		case displayIndex := <-m.frontendReadyChan:
+			log.Printf("[WindowManager] Received ready from display %d (%d/%d)", displayIndex, m.readyDisplays+1, expectedCount)
+			m.readyDisplays++
+		case <-time.After(remaining):
+			log.Printf("[WindowManager] Timeout waiting for frontend ready, got %d/%d", m.readyDisplays, expectedCount)
+			return false
+		}
+	}
+
+	log.Printf("[WindowManager] All frontends ready (%d/%d)", m.readyDisplays, expectedCount)
+	return true
+}
+
 // StartCapture 开始截图流程
 func (m *WindowManager) StartCapture() (string, error) {
+	startTime := time.Now()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	log.Printf("[WindowManager] Starting capture...")
+	log.Printf("[WindowManager] [TIMING] Starting capture...")
 
 	// 先清理旧窗口（确保没有残留）
 	m.closeAllWindowsLocked()
+	log.Printf("[WindowManager] [TIMING] After closeAllWindows: %v", time.Since(startTime))
+
+	// 清空 ready channel 中的旧消息
+	drained := 0
+	for {
+		select {
+		case <-m.frontendReadyChan:
+			drained++
+		default:
+			goto startCapture
+		}
+	}
+startCapture:
+	if drained > 0 {
+		log.Printf("[WindowManager] Drained %d old messages from ready channel before capture", drained)
+	}
 
 	// 隐藏主窗口（在截图之前）
 	if m.mainWindow != nil {
@@ -70,25 +128,32 @@ func (m *WindowManager) StartCapture() (string, error) {
 		// 等待窗口完全隐藏
 		time.Sleep(100 * time.Millisecond)
 	}
+	log.Printf("[WindowManager] [TIMING] After hide main window: %v", time.Since(startTime))
 
 	// 生成会话 ID
 	m.sessionId = generateSessionId()
+	log.Printf("[WindowManager] [TIMING] Before getting screen info: %v", time.Since(startTime))
 
 	// 获取 Wails 屏幕信息（使用全局 App 实例）
 	app := application.Get()
+	log.Printf("[WindowManager] [TIMING] After application.Get(): %v", time.Since(startTime))
 	if app == nil {
 		log.Printf("[WindowManager] ERROR: application.Get() returned nil!")
 	} else if app.Screen == nil {
 		log.Printf("[WindowManager] ERROR: app.Screen (from Get()) is nil!")
+		log.Printf("[WindowManager] [TIMING] app.Screen is nil: %v", time.Since(startTime))
 	} else {
 		screens := app.Screen.GetAll()
+		log.Printf("[WindowManager] [TIMING] After Screen.GetAll(): %v", time.Since(startTime))
 		log.Printf("[WindowManager] application.Get().Screen.GetAll() returned %d screens", len(screens))
 
 		// 如果返回 0 个屏幕，尝试手动初始化 ScreenManager
 		// 这是 Wails v3 macOS 的一个已知问题：ScreenManager 没有自动填充
 		if len(screens) == 0 {
+			log.Printf("[WindowManager] [TIMING] Before initScreensManually: %v", time.Since(startTime))
 			log.Printf("[WindowManager] Attempting to manually initialize ScreenManager...")
 			screens = m.initScreensManually(app)
+			log.Printf("[WindowManager] [TIMING] After initScreensManually: %v", time.Since(startTime))
 			log.Printf("[WindowManager] Manual initialization returned %d screens", len(screens))
 		}
 
@@ -96,9 +161,11 @@ func (m *WindowManager) StartCapture() (string, error) {
 			m.wailsScreens = screens
 		}
 	}
+	log.Printf("[WindowManager] [TIMING] After first screen check: %v, wailsScreens=%d", time.Since(startTime), len(m.wailsScreens))
 
 	// 也尝试使用 m.app
 	if len(m.wailsScreens) == 0 && m.app != nil {
+		log.Printf("[WindowManager] [TIMING] Trying m.app for screens: %v", time.Since(startTime))
 		if m.app.Screen == nil {
 			log.Printf("[WindowManager] ERROR: m.app.Screen is nil!")
 		} else {
@@ -119,12 +186,17 @@ func (m *WindowManager) StartCapture() (string, error) {
 	}
 
 	// 如果无法获取 Wails 屏幕信息，使用回退方案
+	log.Printf("[WindowManager] [TIMING] Before fallback check: %v, wailsScreens=%d", time.Since(startTime), len(m.wailsScreens))
 
 	// 如果 Wails API 返回 0 个屏幕，回退到 screenshot 库
 	if len(m.wailsScreens) == 0 {
 		log.Printf("[WindowManager] Warning: Wails returned 0 screens, falling back to screenshot library")
+		log.Printf("[WindowManager] [TIMING] Before GetDisplays: %v", time.Since(startTime))
+		log.Printf("[WindowManager] [TIMING] Before GetDisplays: %v", time.Since(startTime))
+
 		// 使用 screenshot 库获取显示器信息
 		displays := m.plugin.GetDisplays()
+		log.Printf("[WindowManager] [TIMING] After GetDisplays: %v", time.Since(startTime))
 
 		// 获取虚拟桌面总高度（用于坐标转换）
 		_, _, _, totalHeight := m.plugin.GetVirtualDesktopBounds()
@@ -136,9 +208,11 @@ func (m *WindowManager) StartCapture() (string, error) {
 			m.showMainWindow()
 			return "", err
 		}
+		log.Printf("[WindowManager] [TIMING] After CaptureAllDisplays: %v", time.Since(startTime))
 
 		// 进入 Kiosk 模式
 		EnterKioskMode()
+		log.Printf("[WindowManager] [TIMING] After EnterKioskMode: %v", time.Since(startTime))
 
 		// 为每个显示器创建窗口
 		// 需要将截图库坐标（左上角原点）转换为 Wails 坐标（macOS 左下角原点）
@@ -179,10 +253,13 @@ func (m *WindowManager) StartCapture() (string, error) {
 				continue
 			}
 		}
+		log.Printf("[WindowManager] [TIMING] After create all windows: %v", time.Since(startTime))
 
-		// 等待前端加载完成
+		// 等待前端加载完成（使用事件机制）
 		log.Printf("[WindowManager] Waiting for frontend to load...")
-		time.Sleep(500 * time.Millisecond)
+		waitStart := time.Now()
+		m.waitForFrontendReady(len(m.windows), 2*time.Second)
+		log.Printf("[WindowManager] [TIMING] After waitForFrontendReady (wait took %v): %v", time.Since(waitStart), time.Since(startTime))
 
 		// 广播显示器信息给所有窗口
 		displaysJSON, _ := json.Marshal(displays)
@@ -199,28 +276,32 @@ func (m *WindowManager) StartCapture() (string, error) {
 		m.isCapturing = true
 		m.emitEvent("started", "capture started")
 
-		log.Printf("[WindowManager] Capture started with %d windows", len(m.windows))
+		log.Printf("[WindowManager] [TIMING] Capture started with %d windows, TOTAL: %v", len(m.windows), time.Since(startTime))
 		return m.sessionId, nil
 	}
 
 	// 使用 Wails 屏幕信息
+	log.Printf("[WindowManager] [TIMING] Using Wails screens path: %v", time.Since(startTime))
 	for i, screen := range m.wailsScreens {
 		log.Printf("[WindowManager] Wails Screen %d: Name=%s, Position=(%d,%d), Size=%dx%d, Scale=%.2f, Primary=%v",
 			i, screen.Name, screen.X, screen.Y, screen.Size.Width, screen.Size.Height, screen.ScaleFactor, screen.IsPrimary)
 	}
 
 	// 捕获所有显示器
+	log.Printf("[WindowManager] [TIMING] Before CaptureAllDisplaysSeparately: %v", time.Since(startTime))
 	captureResults, err := m.plugin.CaptureAllDisplaysSeparately()
 	if err != nil {
 		m.showMainWindow()
 		return "", err
 	}
+	log.Printf("[WindowManager] [TIMING] After CaptureAllDisplaysSeparately: %v", time.Since(startTime))
 
 	// 获取显示器信息（用于前端显示）
 	displays := m.plugin.GetDisplays()
 
 	// 进入 Kiosk 模式
 	EnterKioskMode()
+	log.Printf("[WindowManager] [TIMING] After EnterKioskMode: %v", time.Since(startTime))
 
 	// 为每个显示器创建窗口（每个窗口显示自己的截图）
 	for i, screen := range m.wailsScreens {
@@ -256,10 +337,13 @@ func (m *WindowManager) StartCapture() (string, error) {
 			continue
 		}
 	}
+	log.Printf("[WindowManager] [TIMING] After create all windows: %v", time.Since(startTime))
 
-	// 等待前端加载完成
+	// 等待前端加载完成（使用事件机制）
 	log.Printf("[WindowManager] Waiting for frontend to load...")
-	time.Sleep(500 * time.Millisecond)
+	waitStart := time.Now()
+	m.waitForFrontendReady(len(m.windows), 2*time.Second)
+	log.Printf("[WindowManager] [TIMING] After waitForFrontendReady (wait took %v): %v", time.Since(waitStart), time.Since(startTime))
 
 	// 广播显示器信息给所有窗口
 	displaysJSON, _ := json.Marshal(displays)
@@ -292,17 +376,16 @@ func (m *WindowManager) createWindowForDisplay(display DisplayInfo, captureResul
 	windowName := fmt.Sprintf("screenshot2-overlay-%d", display.Index)
 
 	window := m.app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:          windowName,
-		Title:         fmt.Sprintf("Screenshot - Display %d", display.Index),
-		Width:         display.Width,
-		Height:        display.Height,
-		X:             display.X,
-		Y:             display.Y,
-		Frameless:     true,
-		AlwaysOnTop:   true,
-		DisableResize: true, // 禁止缩放
-		BackgroundType: application.BackgroundTypeSolid,
-		BackgroundColour: application.NewRGB(0, 0, 0),
+		Name:           windowName,
+		Title:          fmt.Sprintf("Screenshot - Display %d", display.Index),
+		Width:          display.Width,
+		Height:         display.Height,
+		X:              display.X,
+		Y:              display.Y,
+		Frameless:      true,
+		AlwaysOnTop:    true,
+		DisableResize:  true, // 禁止缩放
+		BackgroundType: application.BackgroundTypeTransparent,
 		Mac: application.MacWindow{
 			TitleBar: application.MacTitleBar{
 				Hide: true,
@@ -338,63 +421,6 @@ func (m *WindowManager) createWindowForDisplay(display DisplayInfo, captureResul
 	return nil
 }
 
-// createWindowForDisplayWithOffset 为指定显示器创建窗口（带虚拟桌面偏移）
-// 用于跨屏选区支持
-func (m *WindowManager) createWindowForDisplayWithOffset(display DisplayInfo, captureResult *CaptureResult, offsetX, offsetY int) error {
-	log.Printf("[WindowManager] Creating window for display %d at (%d, %d), size: %dx%d, scale: %.1f, virtual offset: (%d, %d)",
-		display.Index, display.X, display.Y, display.Width, display.Height, display.ScaleFactor, offsetX, offsetY)
-
-	// 每个窗口使用唯一的名称
-	windowName := fmt.Sprintf("screenshot2-overlay-%d", display.Index)
-
-	// 计算该显示器在虚拟桌面上的物理偏移
-	virtualX := display.X - offsetX
-	virtualY := display.Y - offsetY
-
-	window := m.app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:          windowName,
-		Title:         fmt.Sprintf("Screenshot - Display %d", display.Index),
-		Width:         display.Width,
-		Height:        display.Height,
-		X:             display.X,
-		Y:             display.Y,
-		Frameless:     true,
-		AlwaysOnTop:   true,
-		DisableResize: true,
-		BackgroundType: application.BackgroundTypeSolid,
-		BackgroundColour: application.NewRGB(0, 0, 0),
-		Mac: application.MacWindow{
-			TitleBar: application.MacTitleBar{
-				Hide: true,
-			},
-			Backdrop:           application.MacBackdropTransparent,
-			WindowLevel:        application.MacWindowLevelScreenSaver,
-			CollectionBehavior: application.MacWindowCollectionBehaviorCanJoinAllSpaces,
-		},
-		// 传递虚拟桌面信息给前端
-		URL: fmt.Sprintf("/screenshot2-overlay?display=%d&scale=%.1f&vx=%d&vy=%d&vw=%d&vh=%d",
-			display.Index, display.ScaleFactor, virtualX, virtualY, captureResult.Width, captureResult.Height),
-	})
-
-	if window == nil {
-		return ErrCreateWindowFailed
-	}
-
-	m.windows[display.Index] = window
-
-	window.Show()
-	window.SetPosition(display.X, display.Y)
-
-	actualX, actualY := window.Position()
-	log.Printf("[WindowManager] Window for display %d - requested: (%d, %d), actual: (%d, %d)",
-		display.Index, display.X, display.Y, actualX, actualY)
-
-	window.Focus()
-
-	log.Printf("[WindowManager] Window created for display %d with virtual coords (%d, %d)", display.Index, virtualX, virtualY)
-	return nil
-}
-
 // GetDisplayWindow 获取指定显示器的窗口
 func (m *WindowManager) GetDisplayWindow(displayIndex int) *application.WebviewWindow {
 	m.mu.RLock()
@@ -423,17 +449,17 @@ func (m *WindowManager) initScreensManually(app *application.App) []*application
 		physicalHeight := int(float64(display.Height) * display.ScaleFactor)
 
 		screens[i] = &application.Screen{
-			ID:        fmt.Sprintf("display-%d", display.Index),
-			Name:      display.Name,
-			X:         display.X,
-			Y:         display.Y,
-			Size:      application.Size{Width: display.Width, Height: display.Height},
-			Bounds:    application.Rect{X: display.X, Y: display.Y, Width: display.Width, Height: display.Height},
-			PhysicalBounds: application.Rect{X: display.X, Y: display.Y, Width: physicalWidth, Height: physicalHeight},
-			WorkArea:       application.Rect{X: display.X, Y: display.Y, Width: display.Width, Height: display.Height},
+			ID:               fmt.Sprintf("display-%d", display.Index),
+			Name:             display.Name,
+			X:                display.X,
+			Y:                display.Y,
+			Size:             application.Size{Width: display.Width, Height: display.Height},
+			Bounds:           application.Rect{X: display.X, Y: display.Y, Width: display.Width, Height: display.Height},
+			PhysicalBounds:   application.Rect{X: display.X, Y: display.Y, Width: physicalWidth, Height: physicalHeight},
+			WorkArea:         application.Rect{X: display.X, Y: display.Y, Width: display.Width, Height: display.Height},
 			PhysicalWorkArea: application.Rect{X: display.X, Y: display.Y, Width: physicalWidth, Height: physicalHeight},
-			IsPrimary:   display.Primary,
-			ScaleFactor: float32(display.ScaleFactor),
+			IsPrimary:        display.Primary,
+			ScaleFactor:      float32(display.ScaleFactor),
 		}
 		log.Printf("[WindowManager] initScreensManually: Screen %d - Name=%s, Position=(%d,%d), LogicalSize=%dx%d, PhysicalSize=%dx%d, Scale=%.2f, Primary=%v",
 			i, screens[i].Name, screens[i].X, screens[i].Y,
@@ -576,16 +602,12 @@ func (m *WindowManager) startGlobalMouseMonitor() {
 				// 确定鼠标在哪个显示器上
 				targetDisplay := -1
 				for i, screen := range m.wailsScreens {
-					// 使用物理像素坐标进行比较
-					physicalX := int(float64(screen.X) * float64(screen.ScaleFactor))
-					physicalY := int(float64(screen.Y) * float64(screen.ScaleFactor))
-					physicalWidth := int(float64(screen.Size.Width) * float64(screen.ScaleFactor))
-					physicalHeight := int(float64(screen.Size.Height) * float64(screen.ScaleFactor))
-
-					// macOS 坐标系 Y 轴从底部开始，需要转换
-					// 但 GetGlobalMousePosition 返回的已经是 macOS 坐标
-					if mouseX >= float64(physicalX) && mouseX < float64(physicalX+physicalWidth) &&
-						mouseY >= float64(physicalY) && mouseY < float64(physicalY+physicalHeight) {
+					// NSEvent mouseLocation 返回的是逻辑坐标，screen.X/Y 也是逻辑坐标
+					// 直接比较逻辑坐标，不需要乘以 ScaleFactor
+					right := float64(screen.X + screen.Size.Width)
+					top := float64(screen.Y + screen.Size.Height)
+					if mouseX >= float64(screen.X) && mouseX < right &&
+						mouseY >= float64(screen.Y) && mouseY < top {
 						targetDisplay = i
 						break
 					}

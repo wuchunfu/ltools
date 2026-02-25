@@ -11,9 +11,9 @@ import (
 
 // Screenshot2Service 暴露截图功能给前端
 type Screenshot2Service struct {
-	app            *application.App
-	plugin         *Screenshot2Plugin
-	windowManager  *WindowManager
+	app           *application.App
+	plugin        *Screenshot2Plugin
+	windowManager *WindowManager
 }
 
 // NewScreenshot2Service creates a new screenshot2 service
@@ -175,6 +175,16 @@ func (s *Screenshot2Service) CancelCapture() {
 	s.plugin.ClearDisplayImages()
 	s.emitEvent("cancelled", "capture cancelled")
 	log.Printf("[Screenshot2Service] Capture cancelled")
+}
+
+// FrontendReady 前端调用此方法通知已加载完成
+func (s *Screenshot2Service) FrontendReady(displayIndex int) {
+	log.Printf("[Screenshot2Service] FrontendReady called for display %d", displayIndex)
+	if s.windowManager != nil {
+		s.windowManager.OnFrontendReady(displayIndex)
+	} else {
+		log.Printf("[Screenshot2Service] WARNING: windowManager is nil!")
+	}
 }
 
 // FocusDisplayWindow 聚焦指定显示器的窗口

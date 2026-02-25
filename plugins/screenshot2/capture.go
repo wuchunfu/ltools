@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/kbinani/screenshot"
@@ -39,7 +40,7 @@ type CaptureResult struct {
 	Image        *image.RGBA `json:"-"` // 内部使用，不序列化
 }
 
-// CaptureAllDisplaysSeparately 为每个显示器单独截图
+// CaptureAllDisplaysSeparately 为每个显示器单独截图（并行模式）
 // 返回每个显示器的截图数据，支持微信风格的多窗口显示
 func (p *Screenshot2Plugin) CaptureAllDisplaysSeparately() (map[int]*CaptureResult, error) {
 	numDisplays := screenshot.NumActiveDisplays()
@@ -47,47 +48,62 @@ func (p *Screenshot2Plugin) CaptureAllDisplaysSeparately() (map[int]*CaptureResu
 		return nil, &NoDisplayError{}
 	}
 
-	log.Printf("[Screenshot2] 开始捕获 %d 个显示器（独立模式）", numDisplays)
+	log.Printf("[Screenshot2] 开始并行捕获 %d 个显示器", numDisplays)
 
 	results := make(map[int]*CaptureResult)
+	var resultsMu sync.Mutex
+	var wg sync.WaitGroup
 
+	// 并行捕获所有显示器
 	for i := 0; i < numDisplays; i++ {
-		log.Printf("[Screenshot2] 正在捕获显示器 %d...", i)
+		wg.Add(1)
+		go func(displayIndex int) {
+			defer wg.Done()
 
-		img, err := p.captureDisplay(i)
-		if err != nil {
-			log.Printf("[Screenshot2] 捕获显示器 %d 失败: %v", i, err)
-			continue
-		}
+			log.Printf("[Screenshot2] 正在捕获显示器 %d...", displayIndex)
 
-		// 转换为 PNG
-		pngData, err := imageToPNG(img)
-		if err != nil {
-			log.Printf("[Screenshot2] 转换显示器 %d PNG 失败: %v", i, err)
-			continue
-		}
+			img, err := p.captureDisplay(displayIndex)
+			if err != nil {
+				log.Printf("[Screenshot2] 捕获显示器 %d 失败: %v", displayIndex, err)
+				return
+			}
 
-		// 存储原始数据
-		p.displayImages[i] = pngData
+			// 转换为 PNG
+			pngData, err := imageToPNG(img)
+			if err != nil {
+				log.Printf("[Screenshot2] 转换显示器 %d PNG 失败: %v", displayIndex, err)
+				return
+			}
 
-		// 转换为 base64
-		base64Data := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngData)
+			// 转换为 base64
+			base64Data := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngData)
 
-		results[i] = &CaptureResult{
-			DisplayIndex: i,
-			Base64Data:   base64Data,
-			Width:        img.Bounds().Dx(),
-			Height:       img.Bounds().Dy(),
-			Image:        img, // 保存原始图像用于合并
-		}
+			result := &CaptureResult{
+				DisplayIndex: displayIndex,
+				Base64Data:   base64Data,
+				Width:        img.Bounds().Dx(),
+				Height:       img.Bounds().Dy(),
+				Image:        img,
+			}
 
-		log.Printf("[Screenshot2] 显示器 %d 捕获成功: %dx%d", i, img.Bounds().Dx(), img.Bounds().Dy())
+			// 线程安全地存储结果
+			resultsMu.Lock()
+			results[displayIndex] = result
+			p.displayImages[displayIndex] = pngData
+			resultsMu.Unlock()
+
+			log.Printf("[Screenshot2] 显示器 %d 捕获成功: %dx%d", displayIndex, img.Bounds().Dx(), img.Bounds().Dy())
+		}(i)
 	}
+
+	// 等待所有捕获完成
+	wg.Wait()
 
 	if len(results) == 0 {
 		return nil, fmt.Errorf("failed to capture any display")
 	}
 
+	log.Printf("[Screenshot2] 并行捕获完成，成功捕获 %d 个显示器", len(results))
 	return results, nil
 }
 

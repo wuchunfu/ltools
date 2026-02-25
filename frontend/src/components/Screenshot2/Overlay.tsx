@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Events } from '@wailsio/runtime';
+import { Events, Dialogs } from '@wailsio/runtime';
 import * as Screenshot2Service from '../../../bindings/ltools/plugins/screenshot2/screenshot2service';
+import { useAnnotation } from './hooks/useAnnotation';
+import Toolbar from './Toolbar';
 import './styles.css';
 
 // 选区类型
@@ -26,73 +28,6 @@ interface DisplayInfo {
 // 拖拽手柄类型
 type HandleType = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | null;
 
-// 工具栏组件
-const Toolbar: React.FC<{
-  selection: Selection | null;
-  canvasWidth: number;
-  canvasHeight: number;
-  scaleFactor: number;
-  onCopy: () => void;
-  onSave: () => void;
-  onCancel: () => void;
-}> = ({ selection, canvasWidth, canvasHeight, scaleFactor, onCopy, onSave, onCancel }) => {
-  if (!selection || selection.width === 0 || selection.height === 0) {
-    return null;
-  }
-
-  // 将物理像素坐标转换为逻辑像素（用于 CSS 定位）
-  const logicalX = selection.x / scaleFactor;
-  const logicalY = selection.y / scaleFactor;
-  const logicalWidth = selection.width / scaleFactor;
-  const logicalHeight = selection.height / scaleFactor;
-  const logicalCanvasWidth = canvasWidth / scaleFactor;
-  const logicalCanvasHeight = canvasHeight / scaleFactor;
-
-  // 计算工具栏位置：选区下方居中，但确保不超出屏幕
-  const toolbarHeight = 44;
-  const toolbarWidth = 120;
-  const margin = 10;
-
-  // 默认放在选区下方居中（使用逻辑坐标）
-  let toolbarY = logicalY + logicalHeight + margin;
-  let toolbarX = logicalX + logicalWidth / 2;
-
-  // 如果下方放不下，放在选区上方
-  if (toolbarY + toolbarHeight > logicalCanvasHeight) {
-    toolbarY = logicalY - toolbarHeight - margin;
-  }
-
-  // 确保工具栏不超出左右边界
-  const halfWidth = toolbarWidth / 2;
-  if (toolbarX - halfWidth < 0) {
-    toolbarX = halfWidth;
-  } else if (toolbarX + halfWidth > logicalCanvasWidth) {
-    toolbarX = logicalCanvasWidth - halfWidth;
-  }
-
-  return (
-    <div
-      className="screenshot2-toolbar"
-      style={{
-        position: 'absolute',
-        left: toolbarX,
-        top: toolbarY,
-        transform: 'translateX(-50%)',
-      }}
-    >
-      <button onClick={onCopy} title="复制到剪贴板 (Enter)">
-        <span className="icon">📋</span>
-      </button>
-      <button onClick={onSave} title="保存文件">
-        <span className="icon">💾</span>
-      </button>
-      <button onClick={onCancel} title="取消 (ESC)">
-        <span className="icon">✕</span>
-      </button>
-    </div>
-  );
-};
-
 // Toast 组件
 const Toast: React.FC<{ message: string; visible: boolean }> = ({ message, visible }) => {
   if (!visible) return null;
@@ -115,11 +50,42 @@ const Screenshot2Overlay: React.FC = () => {
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [originalSelection, setOriginalSelection] = useState<Selection | null>(null);
   const [toast, setToast] = useState({ message: '', visible: false });
+  const [isAnnotating, setIsAnnotating] = useState(false);
+
+  // 文字输入状态
+  const [textInput, setTextInput] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    value: string;
+  }>({ visible: false, x: 0, y: 0, value: '' });
+  const textInputRef = useRef<HTMLInputElement>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const selectionRef = useRef<Selection | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+
+  // 使用标注 Hook
+  const {
+    annotations,
+    currentType,
+    currentColor,
+    strokeWidth,
+    currentAnnotation,
+    setTool,
+    setColor,
+    setStrokeWidth,
+    startDrawing,
+    updateDrawing,
+    finishDrawing,
+    undo,
+    redo,
+    clearAnnotations,
+    addTextAnnotation,
+    canUndo,
+    canRedo,
+  } = useAnnotation();
 
   // 从 URL 获取参数
   const getDisplayIndex = (): number => {
@@ -144,6 +110,14 @@ const Screenshot2Overlay: React.FC = () => {
   // 初始化事件监听
   useEffect(() => {
     console.log('[Screenshot2Overlay] Component mounted, registering event listeners...');
+    console.log('[Screenshot2Overlay] Calling FrontendReady for display', currentDisplayIndex);
+
+    // 通知后端前端已就绪
+    Screenshot2Service.FrontendReady(currentDisplayIndex).then(() => {
+      console.log('[Screenshot2Overlay] FrontendReady called successfully for display', currentDisplayIndex);
+    }).catch((err) => {
+      console.error('[Screenshot2Overlay] Failed to notify frontend ready:', err);
+    });
 
     const unsubscribeSessionStart = Events.On('screenshot2:session-start', (ev: any) => {
       console.log('[Screenshot2Overlay] Session started:', ev.data);
@@ -276,6 +250,35 @@ const Screenshot2Overlay: React.FC = () => {
 
     const { x, y } = getPhysicalCoords(e);
 
+    // 如果有选区且选择了标注工具，检查是否在选区内开始标注
+    if (selection && selection.width > 0 && selection.height > 0 && currentType) {
+      const inSelection =
+        x >= selection.x &&
+        x <= selection.x + selection.width &&
+        y >= selection.y &&
+        y <= selection.y + selection.height;
+
+      if (inSelection) {
+        // 文字工具：显示文本输入框
+        if (currentType === 'text') {
+          setTextInput({
+            visible: true,
+            x: x / scaleFactor, // 转换为逻辑坐标用于 CSS 定位
+            y: y / scaleFactor,
+            value: '',
+          });
+          // 延迟聚焦输入框
+          setTimeout(() => textInputRef.current?.focus(), 0);
+          return;
+        }
+
+        // 其他标注工具：开始绘制
+        setIsAnnotating(true);
+        startDrawing(x, y);
+        return;
+      }
+    }
+
     // 广播选区开始事件，通知其他窗口清除选区
     Events.Emit('screenshot2:selection-started', currentDisplayIndex);
 
@@ -295,14 +298,43 @@ const Screenshot2Overlay: React.FC = () => {
     setIsSelecting(true);
     setStartPos({ x, y });
     setSelection({ x, y, width: 0, height: 0 });
-  }, [selection, detectHandle, getPhysicalCoords]);
+  }, [selection, detectHandle, getPhysicalCoords, currentType, startDrawing, currentDisplayIndex]);
 
   // 鼠标移动
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const { x, y } = getPhysicalCoords(e);
 
+    // 如果正在标注绘制
+    if (isAnnotating) {
+      updateDrawing(x, y);
+      return;
+    }
+
     // 更新鼠标样式
     if (selection && selection.width > 0 && selection.height > 0) {
+      // 如果选择了标注工具，在选区内显示对应光标
+      if (currentType) {
+        const inSelection =
+          x >= selection.x &&
+          x <= selection.x + selection.width &&
+          y >= selection.y &&
+          y <= selection.y + selection.height;
+        if (inSelection) {
+          // 根据工具类型设置不同的光标
+          const cursorMap: Record<string, string> = {
+            rect: 'crosshair',
+            ellipse: 'crosshair',
+            arrow: 'crosshair',
+            text: 'text',
+            brush: 'crosshair',
+            mosaic: 'cell',
+            blur: 'crosshair',
+          };
+          canvasRef.current!.style.cursor = cursorMap[currentType] || 'crosshair';
+          return;
+        }
+      }
+
       const handle = detectHandle(x, y, selection);
       if (handle) {
         const cursorMap: Record<string, string> = {
@@ -384,15 +416,134 @@ const Screenshot2Overlay: React.FC = () => {
     const selHeight = Math.abs(y - startPos.y);
 
     setSelection({ x: selX, y: selY, width: selWidth, height: selHeight });
-  }, [isSelecting, isDraggingHandle, activeHandle, startPos, selection, originalSelection, detectHandle, getPhysicalCoords]);
+  }, [isSelecting, isDraggingHandle, isAnnotating, activeHandle, startPos, selection, originalSelection, currentType, detectHandle, getPhysicalCoords, updateDrawing]);
 
   // 鼠标松开
   const handleMouseUp = useCallback(() => {
+    if (isAnnotating) {
+      finishDrawing();
+      setIsAnnotating(false);
+      return;
+    }
     setIsSelecting(false);
     setIsDraggingHandle(false);
     setActiveHandle(null);
     setOriginalSelection(null);
-  }, []);
+  }, [isAnnotating, finishDrawing]);
+
+  // 全局鼠标移动（用于跨显示器拖拽）
+  const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
+    if (!isSelecting && !isDraggingHandle && !isAnnotating) return;
+
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    // 计算相对于 canvas 的坐标
+    const logicalX = e.clientX - rect.left;
+    const logicalY = e.clientY - rect.top;
+    const x = logicalX * scaleFactor;
+    const y = logicalY * scaleFactor;
+
+    // 如果正在标注绘制
+    if (isAnnotating) {
+      updateDrawing(x, y);
+      return;
+    }
+
+    // 拖拽手柄调整选区
+    if (isDraggingHandle && activeHandle && originalSelection) {
+      const dx = x - startPos.x;
+      const dy = y - startPos.y;
+
+      let newSel = { ...originalSelection };
+
+      switch (activeHandle) {
+        case 'nw':
+          newSel.x = originalSelection.x + dx;
+          newSel.y = originalSelection.y + dy;
+          newSel.width = originalSelection.width - dx;
+          newSel.height = originalSelection.height - dy;
+          break;
+        case 'n':
+          newSel.y = originalSelection.y + dy;
+          newSel.height = originalSelection.height - dy;
+          break;
+        case 'ne':
+          newSel.y = originalSelection.y + dy;
+          newSel.width = originalSelection.width + dx;
+          newSel.height = originalSelection.height - dy;
+          break;
+        case 'e':
+          newSel.width = originalSelection.width + dx;
+          break;
+        case 'se':
+          newSel.width = originalSelection.width + dx;
+          newSel.height = originalSelection.height + dy;
+          break;
+        case 's':
+          newSel.height = originalSelection.height + dy;
+          break;
+        case 'sw':
+          newSel.x = originalSelection.x + dx;
+          newSel.width = originalSelection.width - dx;
+          newSel.height = originalSelection.height + dy;
+          break;
+        case 'w':
+          newSel.x = originalSelection.x + dx;
+          newSel.width = originalSelection.width - dx;
+          break;
+      }
+
+      // 规范化选区（处理负宽高）
+      if (newSel.width < 0) {
+        newSel.x += newSel.width;
+        newSel.width = -newSel.width;
+      }
+      if (newSel.height < 0) {
+        newSel.y += newSel.height;
+        newSel.height = -newSel.height;
+      }
+
+      setSelection(newSel);
+      return;
+    }
+
+    // 创建新选区
+    if (!isSelecting) return;
+
+    const selX = Math.min(startPos.x, x);
+    const selY = Math.min(startPos.y, y);
+    const selWidth = Math.abs(x - startPos.x);
+    const selHeight = Math.abs(y - startPos.y);
+
+    setSelection({ x: selX, y: selY, width: selWidth, height: selHeight });
+  }, [isSelecting, isDraggingHandle, activeHandle, startPos, originalSelection, scaleFactor]);
+
+  // 全局鼠标松开
+  const handleGlobalMouseUp = useCallback(() => {
+    if (isAnnotating) {
+      finishDrawing();
+      setIsAnnotating(false);
+      return;
+    }
+    setIsSelecting(false);
+    setIsDraggingHandle(false);
+    setActiveHandle(null);
+    setOriginalSelection(null);
+  }, [isAnnotating, finishDrawing]);
+
+  // 注册全局鼠标事件（在选区开始时）
+  useEffect(() => {
+    if (isSelecting || isDraggingHandle || isAnnotating) {
+      window.addEventListener('mousemove', handleGlobalMouseMove);
+      window.addEventListener('mouseup', handleGlobalMouseUp);
+
+      return () => {
+        window.removeEventListener('mousemove', handleGlobalMouseMove);
+        window.removeEventListener('mouseup', handleGlobalMouseUp);
+      };
+    }
+  }, [isSelecting, isDraggingHandle, isAnnotating, handleGlobalMouseMove, handleGlobalMouseUp]);
 
   // 鼠标进入窗口时聚焦该窗口
   const handleMouseEnter = useCallback(async () => {
@@ -449,59 +600,6 @@ const Screenshot2Overlay: React.FC = () => {
     }
   }, [showToast]);
 
-  // 复制到剪贴板
-  const handleCopy = useCallback(async () => {
-    if (!selection || !imageRef.current) return;
-
-    try {
-      const cropCanvas = document.createElement('canvas');
-      cropCanvas.width = selection.width;
-      cropCanvas.height = selection.height;
-      const ctx = cropCanvas.getContext('2d')!;
-      ctx.drawImage(
-        imageRef.current,
-        selection.x, selection.y, selection.width, selection.height,
-        0, 0, selection.width, selection.height
-      );
-
-      const base64Data = cropCanvas.toDataURL('image/png');
-      await Screenshot2Service.CopyToClipboard(base64Data);
-
-      showToast('已复制到剪贴板');
-
-      // 延迟关闭，让用户看到提示
-      setTimeout(async () => {
-        await Screenshot2Service.CancelCapture();
-      }, 500);
-    } catch (e) {
-      console.error('[Screenshot2Overlay] Copy failed:', e);
-      showToast('复制失败');
-    }
-  }, [selection, showToast]);
-
-  // 保存文件
-  const handleSave = useCallback(async () => {
-    if (!selection || !imageRef.current) return;
-
-    try {
-      const cropCanvas = document.createElement('canvas');
-      cropCanvas.width = selection.width;
-      cropCanvas.height = selection.height;
-      const ctx = cropCanvas.getContext('2d')!;
-      ctx.drawImage(
-        imageRef.current,
-        selection.x, selection.y, selection.width, selection.height,
-        0, 0, selection.width, selection.height
-      );
-
-      const base64Data = cropCanvas.toDataURL('image/png');
-      await Screenshot2Service.SaveImageWithDialog(base64Data);
-      await Screenshot2Service.CancelCapture();
-    } catch (e) {
-      console.error('[Screenshot2Overlay] Save failed:', e);
-    }
-  }, [selection]);
-
   // 取消
   const handleCancel = useCallback(async () => {
     try {
@@ -510,6 +608,232 @@ const Screenshot2Overlay: React.FC = () => {
       console.error('[Screenshot2Overlay] Cancel failed:', e);
     }
   }, []);
+
+  // 绘制单个标注的辅助函数（不使用 useCallback，以便在 handleCopy/handleSave 中使用）
+  // sourceCanvas: 用于马赛克效果采样像素
+  const renderAnnotation = (
+    ctx: CanvasRenderingContext2D,
+    ann: typeof annotations[0],
+    offsetX = 0,
+    offsetY = 0,
+    sourceCanvas?: HTMLCanvasElement | null
+  ) => {
+    ctx.strokeStyle = ann.color || '#ff0000';
+    ctx.fillStyle = ann.color || '#ff0000';
+    ctx.lineWidth = ann.strokeWidth || 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    const x = ann.x - offsetX;
+    const y = ann.y - offsetY;
+
+    switch (ann.type) {
+      case 'rect':
+        ctx.strokeRect(x, y, ann.width || 0, ann.height || 0);
+        break;
+
+      case 'ellipse':
+        ctx.beginPath();
+        const rx = (ann.width || 0) / 2;
+        const ry = (ann.height || 0) / 2;
+        ctx.ellipse(x + rx, y + ry, rx, ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        break;
+
+      case 'arrow':
+        // 箭头支持任意方向（包括负的 width/height）
+        const arrowW = ann.width ?? 0;
+        const arrowH = ann.height ?? 0;
+        const arrowEndX = x + arrowW;
+        const arrowEndY = y + arrowH;
+
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(arrowEndX, arrowEndY);
+        ctx.stroke();
+
+        // 箭头头部
+        const arrowAngle = Math.atan2(arrowH, arrowW);
+        const arrowHeadLen = Math.max(15, (ann.strokeWidth || 2) * 4);
+        ctx.beginPath();
+        ctx.moveTo(arrowEndX, arrowEndY);
+        ctx.lineTo(
+          arrowEndX - arrowHeadLen * Math.cos(arrowAngle - Math.PI / 6),
+          arrowEndY - arrowHeadLen * Math.sin(arrowAngle - Math.PI / 6)
+        );
+        ctx.moveTo(arrowEndX, arrowEndY);
+        ctx.lineTo(
+          arrowEndX - arrowHeadLen * Math.cos(arrowAngle + Math.PI / 6),
+          arrowEndY - arrowHeadLen * Math.sin(arrowAngle + Math.PI / 6)
+        );
+        ctx.stroke();
+        break;
+
+      case 'brush':
+        if (ann.points && ann.points.length > 1) {
+          ctx.beginPath();
+          ctx.moveTo(ann.points[0].x - offsetX, ann.points[0].y - offsetY);
+          for (let i = 1; i < ann.points.length; i++) {
+            ctx.lineTo(ann.points[i].x - offsetX, ann.points[i].y - offsetY);
+          }
+          ctx.stroke();
+        }
+        break;
+
+      case 'mosaic':
+        // 真正的马赛克效果：像素化
+        const blockSize = 12;
+        const mosaicW = Math.abs(ann.width || 0);
+        const mosaicH = Math.abs(ann.height || 0);
+        const mosaicX = ann.width && ann.width < 0 ? x + ann.width : x;
+        const mosaicY = ann.height && ann.height < 0 ? y + ann.height : y;
+
+        if (sourceCanvas && mosaicW > 0 && mosaicH > 0) {
+          const sourceCtx = sourceCanvas.getContext('2d');
+          if (sourceCtx) {
+            for (let py = mosaicY; py < mosaicY + mosaicH; py += blockSize) {
+              for (let px = mosaicX; px < mosaicX + mosaicW; px += blockSize) {
+                // 采样中心像素
+                const sampleX = px + blockSize / 2;
+                const sampleY = py + blockSize / 2;
+                try {
+                  const pixel = sourceCtx.getImageData(
+                    sampleX + offsetX, sampleY + offsetY, 1, 1
+                  ).data;
+                  ctx.fillStyle = `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`;
+                  const bw = Math.min(blockSize, mosaicX + mosaicW - px);
+                  const bh = Math.min(blockSize, mosaicY + mosaicH - py);
+                  ctx.fillRect(px, py, bw, bh);
+                } catch {
+                  // 如果无法获取像素，使用灰色
+                  ctx.fillStyle = '#888';
+                  ctx.fillRect(px, py, blockSize, blockSize);
+                }
+              }
+            }
+          }
+        } else {
+          // 没有源图像时使用灰色马赛克
+          for (let py = mosaicY; py < mosaicY + mosaicH; py += blockSize) {
+            for (let px = mosaicX; px < mosaicX + mosaicW; px += blockSize) {
+              const gray = ((Math.floor(px / blockSize) + Math.floor(py / blockSize)) % 2) * 30 + 100;
+              ctx.fillStyle = `rgb(${gray}, ${gray}, ${gray})`;
+              const bw = Math.min(blockSize, mosaicX + mosaicW - px);
+              const bh = Math.min(blockSize, mosaicY + mosaicH - py);
+              ctx.fillRect(px, py, bw, bh);
+            }
+          }
+        }
+        break;
+
+      case 'text':
+        if (ann.text) {
+          ctx.font = `${(ann.strokeWidth || 2) * 6 + 12}px sans-serif`;
+          ctx.fillText(ann.text, x, y);
+        }
+        break;
+
+      case 'blur':
+        // 模糊效果：简化为半透明覆盖
+        ctx.fillStyle = 'rgba(200, 200, 200, 0.5)';
+        ctx.fillRect(x, y, ann.width || 0, ann.height || 0);
+        break;
+    }
+  };
+
+  // 绘制单个标注（用于 canvas 渲染）
+  const drawAnnotation = useCallback((ctx: CanvasRenderingContext2D, ann: typeof annotations[0], sourceCanvas?: HTMLCanvasElement | null) => {
+    renderAnnotation(ctx, ann, 0, 0, sourceCanvas);
+  }, []);
+
+  // 复制到剪贴板
+  const handleCopy = useCallback(async () => {
+    if (!selection || !imageRef.current || !canvasRef.current) return;
+
+    try {
+      const cropCanvas = document.createElement('canvas');
+      cropCanvas.width = selection.width;
+      cropCanvas.height = selection.height;
+      const ctx = cropCanvas.getContext('2d')!;
+
+      // 绘制原图
+      ctx.drawImage(
+        imageRef.current,
+        selection.x, selection.y, selection.width, selection.height,
+        0, 0, selection.width, selection.height
+      );
+
+      // 绘制所有标注（相对于选区偏移）
+      // 传递原始 canvasRef 用于马赛克采样（马赛克需要从原始图像采样）
+      annotations.forEach(ann => renderAnnotation(ctx, ann, selection.x, selection.y, canvasRef.current));
+
+      const base64Data = cropCanvas.toDataURL('image/png');
+      await Screenshot2Service.CopyToClipboard(base64Data);
+
+      showToast('已复制到剪贴板');
+
+      setTimeout(async () => {
+        await Screenshot2Service.CancelCapture();
+      }, 500);
+    } catch (e) {
+      console.error('[Screenshot2Overlay] Copy failed:', e);
+      showToast('复制失败');
+    }
+  }, [selection, annotations, showToast]);
+
+  // 保存文件
+  const handleSave = useCallback(async () => {
+    if (!selection || !imageRef.current || !canvasRef.current) return;
+
+    try {
+      // 使用 Wails SaveFile 对话框
+      const filePath = await Dialogs.SaveFile({
+        Title: '保存截图',
+        Filename: `screenshot_${Date.now()}.png`,
+        Filters: [
+          { DisplayName: 'PNG 图片', Pattern: '*.png' },
+          { DisplayName: 'JPEG 图片', Pattern: '*.jpg' },
+        ],
+      });
+
+      // 用户取消保存
+      if (!filePath) {
+        return;
+      }
+
+      const cropCanvas = document.createElement('canvas');
+      cropCanvas.width = selection.width;
+      cropCanvas.height = selection.height;
+      const ctx = cropCanvas.getContext('2d')!;
+
+      // 绘制原图
+      ctx.drawImage(
+        imageRef.current,
+        selection.x, selection.y, selection.width, selection.height,
+        0, 0, selection.width, selection.height
+      );
+
+      // 绘制所有标注（相对于选区偏移）
+      // 传递原始 canvasRef 用于马赛克采样
+      annotations.forEach(ann => renderAnnotation(ctx, ann, selection.x, selection.y, canvasRef.current));
+
+      // 根据文件扩展名选择格式
+      const isJpeg = filePath.toLowerCase().endsWith('.jpg') || filePath.toLowerCase().endsWith('.jpeg');
+      const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
+      const base64Data = cropCanvas.toDataURL(mimeType, 0.95);
+
+      // 调用后端保存文件
+      await Screenshot2Service.SaveImage(base64Data, filePath);
+      showToast('已保存');
+
+      setTimeout(async () => {
+        await Screenshot2Service.CancelCapture();
+      }, 500);
+    } catch (e) {
+      console.error('[Screenshot2Overlay] Save failed:', e);
+      showToast('保存失败');
+    }
+  }, [selection, annotations, showToast]);
 
   // 绘制遮罩和选区
   useEffect(() => {
@@ -532,6 +856,14 @@ const Screenshot2Overlay: React.FC = () => {
         selection.x, selection.y, selection.width, selection.height
       );
 
+      // 绘制已完成的标注，传递 canvas 用于马赛克采样
+      annotations.forEach(ann => drawAnnotation(ctx, ann, canvas));
+
+      // 绘制当前正在绘制的标注
+      if (currentAnnotation) {
+        drawAnnotation(ctx, currentAnnotation, canvas);
+      }
+
       // 选区边框
       ctx.strokeStyle = '#00a8ff';
       ctx.lineWidth = 2;
@@ -552,28 +884,84 @@ const Screenshot2Overlay: React.FC = () => {
       const sizeText = `${Math.round(selection.width)} × ${Math.round(selection.height)}`;
       ctx.fillText(sizeText, selection.x + selection.width / 2 - ctx.measureText(sizeText).width / 2, selection.y - 5);
     }
-  }, [selection, imageData, getHandlePositions]);
+  }, [selection, imageData, getHandlePositions, annotations, currentAnnotation, drawAnnotation]);
 
   // 键盘事件
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 如果在文本输入框中，不处理快捷键
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // ESC - 取消或退出工具
       if (e.key === 'Escape') {
-        handleCancel();
-      } else if (e.key === 'Enter' && selection && selection.width > 0 && selection.height > 0) {
+        if (currentType) {
+          // 如果有选中的工具，先退出工具
+          setTool(null);
+        } else {
+          // 否则取消截图
+          handleCancel();
+        }
+        return;
+      }
+
+      // Enter - 复制
+      if (e.key === 'Enter' && selection && selection.width > 0 && selection.height > 0) {
         handleCopy();
+        return;
+      }
+
+      // Delete - 清除标注
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (annotations.length > 0) {
+          clearAnnotations();
+        }
+        return;
+      }
+
+      // Ctrl+Z - 撤销
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+        return;
+      }
+
+      // Ctrl+Shift+Z - 重做
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        redo();
+        return;
+      }
+
+      // 工具快捷键（仅在选区存在时生效）
+      if (selection && selection.width > 0 && selection.height > 0) {
+        switch (e.key.toLowerCase()) {
+          case 'r':
+            setTool(currentType === 'rect' ? null : 'rect');
+            break;
+          case 'a':
+            setTool(currentType === 'arrow' ? null : 'arrow');
+            break;
+          case 't':
+            setTool(currentType === 'text' ? null : 'text');
+            break;
+          case 'b':
+            setTool(currentType === 'brush' ? null : 'brush');
+            break;
+          case 'm':
+            setTool(currentType === 'mosaic' ? null : 'mosaic');
+            break;
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleCancel, handleCopy, selection]);
+  }, [handleCancel, handleCopy, selection, currentType, annotations.length, clearAnnotations, undo, redo, setTool]);
 
   if (!imageData) {
-    return (
-      <div className="screenshot2-overlay loading">
-        <div className="loading-text">正在加载截图...</div>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -583,7 +971,6 @@ const Screenshot2Overlay: React.FC = () => {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
         onMouseEnter={handleMouseEnter}
         onDoubleClick={handleDoubleClick}
       />
@@ -593,9 +980,69 @@ const Screenshot2Overlay: React.FC = () => {
           canvasWidth={canvasSize.width}
           canvasHeight={canvasSize.height}
           scaleFactor={scaleFactor}
+          currentTool={currentType}
+          currentColor={currentColor}
+          strokeWidth={strokeWidth}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onToolChange={setTool}
+          onColorChange={setColor}
+          onStrokeWidthChange={setStrokeWidth}
+          onUndo={undo}
+          onRedo={redo}
+          onClear={clearAnnotations}
           onCopy={handleCopy}
           onSave={handleSave}
           onCancel={handleCancel}
+        />
+      )}
+      {/* 文字输入框 */}
+      {textInput.visible && (
+        <input
+          ref={textInputRef}
+          type="text"
+          className="screenshot2-text-input"
+          style={{
+            position: 'absolute',
+            left: textInput.x,
+            top: textInput.y,
+            transform: 'translateY(-50%)',
+            background: 'rgba(0, 0, 0, 0.8)',
+            border: '1px solid #00a8ff',
+            color: currentColor,
+            fontSize: `${strokeWidth * 6 + 12}px`,
+            padding: '4px 8px',
+            borderRadius: '4px',
+            outline: 'none',
+            minWidth: '100px',
+            zIndex: 10001,
+          }}
+          value={textInput.value}
+          onChange={(e) => setTextInput(prev => ({ ...prev, value: e.target.value }))}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && textInput.value.trim()) {
+              // 创建文字标注
+              addTextAnnotation(
+                textInput.x * scaleFactor,
+                textInput.y * scaleFactor,
+                textInput.value.trim()
+              );
+              setTextInput({ visible: false, x: 0, y: 0, value: '' });
+            } else if (e.key === 'Escape') {
+              setTextInput({ visible: false, x: 0, y: 0, value: '' });
+            }
+            e.stopPropagation();
+          }}
+          onBlur={() => {
+            if (textInput.value.trim()) {
+              addTextAnnotation(
+                textInput.x * scaleFactor,
+                textInput.y * scaleFactor,
+                textInput.value.trim()
+              );
+            }
+            setTextInput({ visible: false, x: 0, y: 0, value: '' });
+          }}
         />
       )}
       <Toast message={toast.message} visible={toast.visible} />
