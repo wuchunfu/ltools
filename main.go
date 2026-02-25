@@ -17,6 +17,7 @@ import (
 	"ltools/plugins/datetime"
 	"ltools/plugins/hosts"
 	"ltools/plugins/jsoneditor"
+	"ltools/plugins/kanban"
 	"ltools/plugins/password"
 	"ltools/plugins/processmanager"
 	"ltools/plugins/qrcode"
@@ -138,6 +139,28 @@ func init() {
 	application.RegisterEvent[string]("search:opened")
 	application.RegisterEvent[string]("search:closed")
 	application.RegisterEvent[[]*plugins.SearchResult]("search:results")
+
+	// Register custom events for the kanban plugin
+	application.RegisterEvent[string]("kanban:board:created")
+	application.RegisterEvent[string]("kanban:board:updated")
+	application.RegisterEvent[string]("kanban:board:deleted")
+	application.RegisterEvent[string]("kanban:column:created")
+	application.RegisterEvent[string]("kanban:column:updated")
+	application.RegisterEvent[string]("kanban:column:deleted")
+	application.RegisterEvent[string]("kanban:column:moved")
+	application.RegisterEvent[string]("kanban:card:created")
+	application.RegisterEvent[string]("kanban:card:updated")
+	application.RegisterEvent[string]("kanban:card:deleted")
+	application.RegisterEvent[string]("kanban:card:moved")
+	application.RegisterEvent[string]("kanban:card:completed")
+	application.RegisterEvent[string]("kanban:card:uncompleted")
+	application.RegisterEvent[string]("kanban:label:created")
+	application.RegisterEvent[string]("kanban:label:updated")
+	application.RegisterEvent[string]("kanban:label:deleted")
+	application.RegisterEvent[string]("kanban:checklist:added")
+	application.RegisterEvent[string]("kanban:checklist:toggled")
+	application.RegisterEvent[string]("kanban:checklist:updated")
+	application.RegisterEvent[string]("kanban:checklist:removed")
 }
 
 // main function serves as the application's entry point. It initializes the application, creates a window,
@@ -288,6 +311,16 @@ func main() {
 		log.Printf("[Main] Failed to set data dir for tunnel plugin: %v", err)
 	}
 
+	// Create and register kanban plugin
+	kanbanPlugin := kanban.NewKanbanPlugin()
+	if err := pluginManager.Register(kanbanPlugin); err != nil {
+		log.Fatal("Failed to register kanban plugin:", err)
+	}
+	// Set data directory for kanban plugin
+	if err := kanbanPlugin.SetDataDir(dataDir); err != nil {
+		log.Printf("[Main] Failed to set data dir for kanban plugin: %v", err)
+	}
+
 	// Start all enabled plugins - this calls ServiceStartup() on each enabled plugin
 	// This is crucial for plugins like clipboard that need to start background monitoring
 	if err := pluginManager.StartupAll(); err != nil {
@@ -338,6 +371,9 @@ func main() {
 	// Create tunnel service to expose tunnel functionality to frontend
 	tunnelService := tunnel.NewTunnelService(tunnelPlugin, app, dataDir)
 
+	// Create kanban service to expose kanban functionality to frontend
+	kanbanService := kanban.NewKanbanService(kanbanPlugin, app, dataDir)
+
 	// Create shortcut service to expose keyboard shortcut management to frontend
 	shortcutService, err := plugins.NewShortcutService(app, dataDir)
 	if err != nil {
@@ -363,6 +399,7 @@ func main() {
 	app.RegisterService(application.NewService(qrcodeService))
 	app.RegisterService(application.NewService(hostsService))
 	app.RegisterService(application.NewService(tunnelService))
+	app.RegisterService(application.NewService(kanbanService))
 	app.RegisterService(application.NewService(shortcutService))
 	app.RegisterService(application.NewService(searchWindowService))
 
