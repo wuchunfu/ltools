@@ -11,6 +11,7 @@ import { QrcodeWidget } from "./components/QrcodeWidget";
 import { HostsWidget } from "./components/HostsWidget";
 import { TunnelWidget } from "./components/TunnelWidget";
 import { ScreenshotWidget } from "./components/ScreenshotWidget";
+import { KanbanWidget } from "./components/kanban";
 import { Settings } from "./components/Settings";
 import { Icon } from './components/Icon';
 import { ToastProvider } from './contexts/ToastContext';
@@ -46,7 +47,8 @@ type IconName = 'home' | 'puzzle-piece' | 'clock' | 'cog' | 'key' | 'shield-chec
   'calculator' | 'cpu' | 'memory' | 'disk' | 'network' | 'server' | 'chip' |
   'code' | 'alert-circle' | 'check' | 'download' | 'upload' | 'process' | 'close' |
   'trash' | 'x-mark' | 'camera' | 'qrcode' | 'folder' | 'folder-open' | 'wrench' |
-  'arrow-left' | 'arrow-right' | 'stop' | 'play' | 'pencil' | 'log' | 'terminal';
+  'arrow-left' | 'arrow-right' | 'stop' | 'play' | 'pencil' | 'log' | 'terminal' |
+  'view-columns';
 
 function App() {
   const [activeTab, setActiveTab] = useState<string>('home');
@@ -241,6 +243,7 @@ function App() {
       'datetime.builtin': 'clock',
       'screenshot.builtin': 'camera',
       'password.builtin': 'key',
+      'kanban.builtin': 'view-columns',
     };
     return iconMap[pluginId] || 'puzzle-piece';
   };
@@ -334,7 +337,7 @@ function App() {
       </aside>
 
       {/* 主内容区 */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto relative">
         {activeTab === 'home' && (
           <div className="p-8">
             <div className="max-w-2xl mx-auto">
@@ -666,8 +669,15 @@ function PluginView({ pluginId, plugins, onBack }: PluginViewProps) {
         </div>
       )}
 
+      {/* 看板插件 */}
+      {pluginId === 'kanban.builtin' && (
+        <div className="absolute inset-0 overflow-hidden">
+          <KanbanWidget />
+        </div>
+      )}
+
       {/* 默认插件界面 - 排除已有专门界面的插件 */}
-      {!pluginId.startsWith('clipboard') && !pluginId.startsWith('sysinfo') && !pluginId.startsWith('calculator') && !pluginId.startsWith('jsoneditor') && !pluginId.startsWith('processmanager') && !pluginId.startsWith('qrcode') && !pluginId.startsWith('hosts') && !pluginId.startsWith('datetime') && !pluginId.startsWith('screenshot') && !pluginId.startsWith('password') && !pluginId.startsWith('tunnel') && (
+      {!pluginId.startsWith('clipboard') && !pluginId.startsWith('sysinfo') && !pluginId.startsWith('calculator') && !pluginId.startsWith('jsoneditor') && !pluginId.startsWith('processmanager') && !pluginId.startsWith('qrcode') && !pluginId.startsWith('hosts') && !pluginId.startsWith('datetime') && !pluginId.startsWith('screenshot') && !pluginId.startsWith('password') && !pluginId.startsWith('tunnel') && !pluginId.startsWith('kanban') && (
         <div className="p-8">
           <div className="max-w-4xl mx-auto">
             {/* 插件页头 */}

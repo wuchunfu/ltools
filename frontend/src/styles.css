@@ -89,7 +89,7 @@ h6 { font-size: 1rem; }
    ============================================ */
 
 ::-webkit-scrollbar {
-  @apply w-2 h-2;
+  @apply w-1 h-1;
 }
 
 ::-webkit-scrollbar-track {
@@ -310,35 +310,35 @@ h6 { font-size: 1rem; }
 /* WebKit 浏览器滚动条样式 */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
 }
 
 /* 滚动条轨道 */
 .scrollbar-thin::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-track {
   background: transparent;
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 /* 滚动条滑块 */
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
   transition: background 0.2s ease;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 /* Firefox 滚动条 */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
 }
 
 /* ============================================
