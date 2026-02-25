@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Icon } from '../../Icon';
 import { AnnotationType } from '../hooks/useAnnotation';
 import './toolbar.css';
@@ -6,6 +6,7 @@ import './toolbar.css';
 // 工具定义
 const ANNOTATION_TOOLS: { type: AnnotationType; icon: string; label: string; shortcut: string }[] = [
   { type: 'rect', icon: 'rectangle', label: '矩形', shortcut: 'R' },
+  { type: 'ellipse', icon: 'circle', label: '圆形', shortcut: 'O' },
   { type: 'arrow', icon: 'arrow-right', label: '箭头', shortcut: 'A' },
   { type: 'text', icon: 'type', label: '文字', shortcut: 'T' },
   { type: 'brush', icon: 'brush', label: '画笔', shortcut: 'B' },
@@ -27,6 +28,9 @@ const COLORS = [
 // 线宽选项
 const STROKE_WIDTHS = [2, 4, 6];
 
+// 文字大小选项
+const FONT_SIZES = [14, 18, 24, 32, 48];
+
 interface ToolbarProps {
   // 选区信息
   selection: { x: number; y: number; width: number; height: number } | null;
@@ -38,6 +42,7 @@ interface ToolbarProps {
   currentTool: AnnotationType;
   currentColor: string;
   strokeWidth: number;
+  fontSize: number;
   canUndo: boolean;
   canRedo: boolean;
 
@@ -45,11 +50,13 @@ interface ToolbarProps {
   onToolChange: (tool: AnnotationType) => void;
   onColorChange: (color: string) => void;
   onStrokeWidthChange: (width: number) => void;
+  onFontSizeChange: (size: number) => void;
   onUndo: () => void;
   onRedo: () => void;
   onClear: () => void;
   onCopy: () => void;
   onSave: () => void;
+  onPin: () => void;
   onCancel: () => void;
 }
 
@@ -65,18 +72,23 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   currentTool,
   currentColor,
   strokeWidth,
+  fontSize,
   canUndo,
   canRedo,
   onToolChange,
   onColorChange,
   onStrokeWidthChange,
+  onFontSizeChange,
   onUndo,
   onRedo,
   onClear,
   onCopy,
   onSave,
+  onPin,
   onCancel,
 }) => {
+  const [showFontMenu, setShowFontMenu] = useState(false);
+
   if (!selection || selection.width === 0 || selection.height === 0) {
     return null;
   }
@@ -91,7 +103,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
   // 计算工具栏位置
   const toolbarHeight = 44;
-  const toolbarWidth = 420; // 估计宽度
+  const toolbarWidth = 380; // 估计宽度
   const margin = 10;
 
   // 默认放在选区下方居中
@@ -165,6 +177,36 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         ))}
       </div>
 
+      {/* 文字大小选择器 - 仅在文字工具时显示，使用下拉菜单 */}
+      {currentTool === 'text' && (
+        <div className="toolbar-group font-size-dropdown">
+          <button
+            className="toolbar-btn font-size-trigger"
+            onClick={() => setShowFontMenu(!showFontMenu)}
+            title={`字号: ${fontSize}px`}
+          >
+            <span className="font-size-label">{fontSize}</span>
+            <Icon name="chevron-down" size={12} />
+          </button>
+          {showFontMenu && (
+            <div className="font-size-menu">
+              {FONT_SIZES.map((size) => (
+                <button
+                  key={size}
+                  className={`font-size-option ${fontSize === size ? 'active' : ''}`}
+                  onClick={() => {
+                    onFontSizeChange(size);
+                    setShowFontMenu(false);
+                  }}
+                >
+                  {size}px
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 编辑操作组 */}
       <div className="toolbar-group">
         <button
@@ -207,6 +249,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           title="保存文件"
         >
           <Icon name="download" size={16} />
+        </button>
+        <button
+          className="toolbar-btn"
+          onClick={onPin}
+          title="贴图 (P)"
+        >
+          <Icon name="pin" size={16} />
         </button>
         <button
           className="toolbar-btn"

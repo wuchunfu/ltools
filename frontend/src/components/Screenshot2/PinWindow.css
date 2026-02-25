@@ -1,0 +1,69 @@
+/* 贴图窗口样式 */
+
+.pin-window {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #e5e5e5;
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  user-select: none;
+  overflow: hidden;
+}
+
+/* 关闭按钮 - 绝对定位右上角 */
+.pin-close-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.9);
+  transition: all 0.15s ease;
+  z-index: 10;
+}
+
+.pin-close-btn:hover {
+  background: rgba(255, 59, 48, 0.9);
+  color: #fff;
+}
+
+/* 图片容器 - 填满窗口 */
+.pin-image-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: move;
+}
+
+.pin-image-container img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* 缩放手柄 */
+.pin-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, rgba(0, 0, 0, 0.2) 50%);
+  border-radius: 0 0 6px 0;
+}
+
+.pin-resize-handle:hover {
+  background: linear-gradient(135deg, transparent 50%, rgba(0, 168, 255, 0.5) 50%);
+}

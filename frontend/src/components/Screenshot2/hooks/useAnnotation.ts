@@ -13,6 +13,7 @@ export interface Annotation {
   height?: number;
   points?: { x: number; y: number }[]; // for brush
   text?: string; // for text
+  fontSize?: number; // 文字大小
   color?: string;
   strokeWidth?: number;
 }
@@ -23,6 +24,7 @@ export interface AnnotationState {
   currentType: AnnotationType;
   currentColor: string;
   strokeWidth: number;
+  fontSize: number; // 文字大小
   isDrawing: boolean;
   currentAnnotation: Annotation | null;
 }
@@ -37,6 +39,7 @@ export function useAnnotation() {
     currentType: null,
     currentColor: '#ff0000',
     strokeWidth: 2,
+    fontSize: 18, // 默认文字大小
     isDrawing: false,
     currentAnnotation: null,
   });
@@ -57,6 +60,11 @@ export function useAnnotation() {
   // 设置线宽
   const setStrokeWidth = useCallback((width: number) => {
     setState(prev => ({ ...prev, strokeWidth: width }));
+  }, []);
+
+  // 设置文字大小
+  const setFontSize = useCallback((size: number) => {
+    setState(prev => ({ ...prev, fontSize: size }));
   }, []);
 
   // 开始绘制
@@ -194,6 +202,7 @@ export function useAnnotation() {
       y,
       text,
       color: state.currentColor,
+      fontSize: state.fontSize,
       strokeWidth: state.strokeWidth,
     };
 
@@ -206,18 +215,20 @@ export function useAnnotation() {
       ...prev,
       annotations: [...prev.annotations, newAnnotation],
     }));
-  }, [state.currentColor, state.strokeWidth, state.annotations]);
+  }, [state.currentColor, state.fontSize, state.strokeWidth, state.annotations]);
 
   return {
     annotations: state.annotations,
     currentType: state.currentType,
     currentColor: state.currentColor,
     strokeWidth: state.strokeWidth,
+    fontSize: state.fontSize,
     isDrawing: state.isDrawing,
     currentAnnotation: state.currentAnnotation,
     setTool,
     setColor,
     setStrokeWidth,
+    setFontSize,
     startDrawing,
     updateDrawing,
     finishDrawing,

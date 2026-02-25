@@ -72,10 +72,12 @@ const Screenshot2Overlay: React.FC = () => {
     currentType,
     currentColor,
     strokeWidth,
+    fontSize,
     currentAnnotation,
     setTool,
     setColor,
     setStrokeWidth,
+    setFontSize,
     startDrawing,
     updateDrawing,
     finishDrawing,
@@ -110,15 +112,9 @@ const Screenshot2Overlay: React.FC = () => {
   // 初始化事件监听
   useEffect(() => {
     console.log('[Screenshot2Overlay] Component mounted, registering event listeners...');
-    console.log('[Screenshot2Overlay] Calling FrontendReady for display', currentDisplayIndex);
 
-    // 通知后端前端已就绪
-    Screenshot2Service.FrontendReady(currentDisplayIndex).then(() => {
-      console.log('[Screenshot2Overlay] FrontendReady called successfully for display', currentDisplayIndex);
-    }).catch((err) => {
-      console.error('[Screenshot2Overlay] Failed to notify frontend ready:', err);
-    });
-
+    // 重要：先注册所有事件监听器，然后再通知后端前端已就绪
+    // 这样可以确保不会错过任何事件（包括图片数据）
     const unsubscribeSessionStart = Events.On('screenshot2:session-start', (ev: any) => {
       console.log('[Screenshot2Overlay] Session started:', ev.data);
       setSessionId(ev.data);
@@ -163,6 +159,14 @@ const Screenshot2Overlay: React.FC = () => {
         setIsDraggingHandle(false);
         setActiveHandle(null);
       }
+    });
+
+    // 所有事件监听器已注册，现在通知后端前端已就绪
+    console.log('[Screenshot2Overlay] All event listeners registered, calling FrontendReady for display', currentDisplayIndex);
+    Screenshot2Service.FrontendReady(currentDisplayIndex).then(() => {
+      console.log('[Screenshot2Overlay] FrontendReady called successfully for display', currentDisplayIndex);
+    }).catch((err) => {
+      console.error('[Screenshot2Overlay] Failed to notify frontend ready:', err);
     });
 
     return () => {
@@ -298,7 +302,8 @@ const Screenshot2Overlay: React.FC = () => {
     setIsSelecting(true);
     setStartPos({ x, y });
     setSelection({ x, y, width: 0, height: 0 });
-  }, [selection, detectHandle, getPhysicalCoords, currentType, startDrawing, currentDisplayIndex]);
+    clearAnnotations(); // 清空之前的标注
+  }, [selection, detectHandle, getPhysicalCoords, currentType, startDrawing, currentDisplayIndex, clearAnnotations]);
 
   // 鼠标移动
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
@@ -611,16 +616,18 @@ const Screenshot2Overlay: React.FC = () => {
 
   // 绘制单个标注的辅助函数（不使用 useCallback，以便在 handleCopy/handleSave 中使用）
   // sourceCanvas: 用于马赛克效果采样像素
+  // scale: 缩放因子，用于将逻辑像素转换为物理像素
   const renderAnnotation = (
     ctx: CanvasRenderingContext2D,
     ann: typeof annotations[0],
     offsetX = 0,
     offsetY = 0,
-    sourceCanvas?: HTMLCanvasElement | null
+    sourceCanvas?: HTMLCanvasElement | null,
+    scale = 1
   ) => {
     ctx.strokeStyle = ann.color || '#ff0000';
     ctx.fillStyle = ann.color || '#ff0000';
-    ctx.lineWidth = ann.strokeWidth || 2;
+    ctx.lineWidth = (ann.strokeWidth || 2) * scale;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -728,7 +735,8 @@ const Screenshot2Overlay: React.FC = () => {
 
       case 'text':
         if (ann.text) {
-          ctx.font = `${(ann.strokeWidth || 2) * 6 + 12}px sans-serif`;
+          const physicalFontSize = (ann.fontSize || 18) * scale;
+          ctx.font = `${physicalFontSize}px sans-serif`;
           ctx.fillText(ann.text, x, y);
         }
         break;
@@ -743,8 +751,8 @@ const Screenshot2Overlay: React.FC = () => {
 
   // 绘制单个标注（用于 canvas 渲染）
   const drawAnnotation = useCallback((ctx: CanvasRenderingContext2D, ann: typeof annotations[0], sourceCanvas?: HTMLCanvasElement | null) => {
-    renderAnnotation(ctx, ann, 0, 0, sourceCanvas);
-  }, []);
+    renderAnnotation(ctx, ann, 0, 0, sourceCanvas, scaleFactor);
+  }, [scaleFactor]);
 
   // 复制到剪贴板
   const handleCopy = useCallback(async () => {
@@ -765,7 +773,7 @@ const Screenshot2Overlay: React.FC = () => {
 
       // 绘制所有标注（相对于选区偏移）
       // 传递原始 canvasRef 用于马赛克采样（马赛克需要从原始图像采样）
-      annotations.forEach(ann => renderAnnotation(ctx, ann, selection.x, selection.y, canvasRef.current));
+      annotations.forEach(ann => renderAnnotation(ctx, ann, selection.x, selection.y, canvasRef.current, scaleFactor));
 
       const base64Data = cropCanvas.toDataURL('image/png');
       await Screenshot2Service.CopyToClipboard(base64Data);
@@ -779,7 +787,7 @@ const Screenshot2Overlay: React.FC = () => {
       console.error('[Screenshot2Overlay] Copy failed:', e);
       showToast('复制失败');
     }
-  }, [selection, annotations, showToast]);
+  }, [selection, annotations, scaleFactor, showToast]);
 
   // 保存文件
   const handleSave = useCallback(async () => {
@@ -815,7 +823,7 @@ const Screenshot2Overlay: React.FC = () => {
 
       // 绘制所有标注（相对于选区偏移）
       // 传递原始 canvasRef 用于马赛克采样
-      annotations.forEach(ann => renderAnnotation(ctx, ann, selection.x, selection.y, canvasRef.current));
+      annotations.forEach(ann => renderAnnotation(ctx, ann, selection.x, selection.y, canvasRef.current, scaleFactor));
 
       // 根据文件扩展名选择格式
       const isJpeg = filePath.toLowerCase().endsWith('.jpg') || filePath.toLowerCase().endsWith('.jpeg');
@@ -833,7 +841,49 @@ const Screenshot2Overlay: React.FC = () => {
       console.error('[Screenshot2Overlay] Save failed:', e);
       showToast('保存失败');
     }
-  }, [selection, annotations, showToast]);
+  }, [selection, annotations, scaleFactor, showToast]);
+
+  // 贴图
+  const handlePin = useCallback(async () => {
+    if (!selection || !imageRef.current || !canvasRef.current) return;
+
+    try {
+      const cropCanvas = document.createElement('canvas');
+      cropCanvas.width = selection.width;
+      cropCanvas.height = selection.height;
+      const ctx = cropCanvas.getContext('2d')!;
+
+      // 绘制原图
+      ctx.drawImage(
+        imageRef.current,
+        selection.x, selection.y, selection.width, selection.height,
+        0, 0, selection.width, selection.height
+      );
+
+      // 绘制所有标注
+      annotations.forEach(ann => renderAnnotation(ctx, ann, selection.x, selection.y, canvasRef.current, scaleFactor));
+
+      const base64Data = cropCanvas.toDataURL('image/png');
+
+      // 计算窗口位置（屏幕中心偏上）
+      const windowX = Math.round(selection.x / scaleFactor);
+      const windowY = Math.round(selection.y / scaleFactor);
+      const windowWidth = Math.round(selection.width / scaleFactor);
+      const windowHeight = Math.round(selection.height / scaleFactor);
+
+      await Screenshot2Service.PinImage(base64Data, windowX, windowY, windowWidth, windowHeight);
+
+      showToast('已创建贴图');
+
+      // 关闭截图窗口
+      setTimeout(async () => {
+        await Screenshot2Service.CancelCapture();
+      }, 300);
+    } catch (e) {
+      console.error('[Screenshot2Overlay] Pin failed:', e);
+      showToast('贴图失败');
+    }
+  }, [selection, annotations, scaleFactor, showToast]);
 
   // 绘制遮罩和选区
   useEffect(() => {
@@ -940,6 +990,9 @@ const Screenshot2Overlay: React.FC = () => {
           case 'r':
             setTool(currentType === 'rect' ? null : 'rect');
             break;
+          case 'o':
+            setTool(currentType === 'ellipse' ? null : 'ellipse');
+            break;
           case 'a':
             setTool(currentType === 'arrow' ? null : 'arrow');
             break;
@@ -983,16 +1036,19 @@ const Screenshot2Overlay: React.FC = () => {
           currentTool={currentType}
           currentColor={currentColor}
           strokeWidth={strokeWidth}
+          fontSize={fontSize}
           canUndo={canUndo}
           canRedo={canRedo}
           onToolChange={setTool}
           onColorChange={setColor}
           onStrokeWidthChange={setStrokeWidth}
+          onFontSizeChange={setFontSize}
           onUndo={undo}
           onRedo={redo}
           onClear={clearAnnotations}
           onCopy={handleCopy}
           onSave={handleSave}
+          onPin={handlePin}
           onCancel={handleCancel}
         />
       )}
@@ -1007,15 +1063,19 @@ const Screenshot2Overlay: React.FC = () => {
             left: textInput.x,
             top: textInput.y,
             transform: 'translateY(-50%)',
-            background: 'rgba(0, 0, 0, 0.8)',
-            border: '1px solid #00a8ff',
+            background: 'rgba(0, 0, 0, 0.85)',
+            border: '1px solid rgba(255,255,255,0.3)',
             color: currentColor,
-            fontSize: `${strokeWidth * 6 + 12}px`,
-            padding: '4px 8px',
-            borderRadius: '4px',
+            fontSize: `${fontSize}px`,
+            padding: '2px 6px',
+            borderRadius: '3px',
             outline: 'none',
-            minWidth: '100px',
+            minWidth: '60px',
+            maxWidth: '300px',
+            height: 'auto',
+            lineHeight: '1.2',
             zIndex: 10001,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
           }}
           value={textInput.value}
           onChange={(e) => setTextInput(prev => ({ ...prev, value: e.target.value }))}

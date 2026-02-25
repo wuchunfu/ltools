@@ -125,8 +125,6 @@ startCapture:
 	if m.mainWindow != nil {
 		log.Printf("[WindowManager] Hiding main window before capture...")
 		m.mainWindow.Hide()
-		// 等待窗口完全隐藏
-		time.Sleep(100 * time.Millisecond)
 	}
 	log.Printf("[WindowManager] [TIMING] After hide main window: %v", time.Since(startTime))
 

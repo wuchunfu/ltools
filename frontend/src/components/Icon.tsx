@@ -79,7 +79,8 @@ export type IconName =
   | 'mosaic'
   | 'undo'
   | 'redo'
-  | 'type';
+  | 'type'
+  | 'pin';
 
 interface IconProps {
   name: IconName;
@@ -550,6 +551,12 @@ export function Icon({ name, size = 20, className = '', color = 'currentColor' }
         <polyline points="4 7 4 4 20 4 20 7" />
         <line x1="9" y1="20" x2="15" y2="20" />
         <line x1="12" y1="4" x2="12" y2="20" />
+      </svg>
+    ),
+    pin: (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+        <path d="M12 17v5" />
+        <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v4.76z" />
       </svg>
     ),
   };

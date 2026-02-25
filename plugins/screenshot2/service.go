@@ -204,6 +204,33 @@ func (s *Screenshot2Service) GetWindowAtPoint(x, y int) (*WindowInfo, error) {
 	return GetWindowAtPoint(x, y, true)
 }
 
+// PinImage 创建贴图窗口
+// imgData: base64 编码的图片数据
+// x, y: 窗口初始位置
+// width, height: 窗口初始大小
+func (s *Screenshot2Service) PinImage(imgData string, x, y, width, height int) error {
+	log.Printf("[Screenshot2Service] PinImage called at (%d, %d), size: %dx%d", x, y, width, height)
+
+	pngData, err := s.decodeBase64Image(imgData)
+	if err != nil {
+		return err
+	}
+
+	// 创建贴图窗口
+	return CreatePinWindow(s.app, pngData, x, y, width, height)
+}
+
+// ClosePinWindow 关闭贴图窗口
+func (s *Screenshot2Service) ClosePinWindow(id int) {
+	log.Printf("[Screenshot2Service] ClosePinWindow called for id %d", id)
+	ClosePinWindow(id)
+}
+
+// GetPinImageData 获取贴图图片数据
+func (s *Screenshot2Service) GetPinImageData(id int) string {
+	return GetPinImageData(id)
+}
+
 // decodeBase64Image 解码 base64 图片数据
 func (s *Screenshot2Service) decodeBase64Image(imgData string) ([]byte, error) {
 	var base64Str string

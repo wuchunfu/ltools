@@ -147,7 +147,7 @@ func (p *Screenshot2Plugin) captureWithScreencapture(displayIndex int, bounds im
 	tmpFile := filepath.Join(tmpDir, fmt.Sprintf("screenshot2_%d_%d.png", displayIndex, time.Now().UnixNano()))
 	defer os.Remove(tmpFile)
 
-	// -D 指定显示器索引（1-based）
+	// -D 指定显示器索引（1-based），-x 不播放声音，-t png 格式
 	cmd := exec.Command("screencapture", "-D", fmt.Sprintf("%d", displayIndex+1), "-x", "-t", "png", tmpFile)
 
 	output, err := cmd.CombinedOutput()

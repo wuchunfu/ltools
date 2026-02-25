@@ -11,7 +11,6 @@ import { QrcodeWidget } from "./components/QrcodeWidget";
 import { HostsWidget } from "./components/HostsWidget";
 import { TunnelWidget } from "./components/TunnelWidget";
 import Screenshot2Widget from "./components/Screenshot2Widget";
-import { ScreenshotWidget } from "./components/ScreenshotWidget";
 import { KanbanWidget } from "./components/kanban";
 import { Settings } from "./components/Settings";
 import { Icon } from './components/Icon';

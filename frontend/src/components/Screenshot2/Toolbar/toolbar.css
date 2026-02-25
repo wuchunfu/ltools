@@ -160,3 +160,60 @@
 .toolbar-btn:hover .toolbar-tooltip {
   opacity: 1;
 }
+
+/* 字号下拉菜单 */
+.font-size-dropdown {
+  position: relative;
+}
+
+.font-size-trigger {
+  width: auto;
+  padding: 0 6px;
+  gap: 2px;
+}
+
+.font-size-label {
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 20px;
+  text-align: center;
+}
+
+.font-size-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(40, 40, 40, 0.98);
+  border-radius: 4px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 60px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 10001;
+}
+
+.font-size-option {
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  text-align: center;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.font-size-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.font-size-option.active {
+  background: rgba(0, 168, 255, 0.3);
+  color: #00a8ff;
+}
