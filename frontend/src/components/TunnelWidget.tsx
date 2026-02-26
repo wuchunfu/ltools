@@ -13,6 +13,13 @@ import {
 } from '../../bindings/ltools/plugins/tunnel/models';
 import { Icon } from './Icon';
 import { useToast } from '../hooks/useToast';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 import { Events } from '@wailsio/runtime';
 
 type View = 'tunnels' | 'create' | 'edit' | 'settings';
@@ -844,17 +851,21 @@ export function TunnelWidget({ onBack }: TunnelWidgetProps): JSX.Element {
 
             <div>
               <label className="block text-sm font-medium text-white/70 mb-2">代理类型</label>
-              <select
+              <Select
                 value={formData.proxyType}
-                onChange={(e) => setFormData({ ...formData, proxyType: e.target.value as ProxyType })}
-                className="w-full px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white focus:outline-none focus:border-[#7C3AED]"
+                onValueChange={(value) => setFormData({ ...formData, proxyType: value as ProxyType })}
               >
-                <option value={ProxyType.ProxyTypeHTTP}>HTTP</option>
-                <option value={ProxyType.ProxyTypeHTTPS}>HTTPS</option>
-                <option value={ProxyType.ProxyTypeTCP}>TCP</option>
-                <option value={ProxyType.ProxyTypeSTCP}>STCP (秘密 TCP)</option>
-                <option value={ProxyType.ProxyTypeXTCP}>XTCP (P2P TCP)</option>
-              </select>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择代理类型" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ProxyType.ProxyTypeHTTP}>HTTP</SelectItem>
+                  <SelectItem value={ProxyType.ProxyTypeHTTPS}>HTTPS</SelectItem>
+                  <SelectItem value={ProxyType.ProxyTypeTCP}>TCP</SelectItem>
+                  <SelectItem value={ProxyType.ProxyTypeSTCP}>STCP (秘密 TCP)</SelectItem>
+                  <SelectItem value={ProxyType.ProxyTypeXTCP}>XTCP (P2P TCP)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
@@ -974,17 +985,21 @@ export function TunnelWidget({ onBack }: TunnelWidgetProps): JSX.Element {
 
             <div>
               <label className="block text-sm font-medium text-white/70 mb-2">代理类型</label>
-              <select
+              <Select
                 value={formData.proxyType}
-                onChange={(e) => setFormData({ ...formData, proxyType: e.target.value as ProxyType })}
-                className="w-full px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white focus:outline-none focus:border-[#7C3AED]"
+                onValueChange={(value) => setFormData({ ...formData, proxyType: value as ProxyType })}
               >
-                <option value={ProxyType.ProxyTypeHTTP}>HTTP</option>
-                <option value={ProxyType.ProxyTypeHTTPS}>HTTPS</option>
-                <option value={ProxyType.ProxyTypeTCP}>TCP</option>
-                <option value={ProxyType.ProxyTypeSTCP}>STCP (秘密 TCP)</option>
-                <option value={ProxyType.ProxyTypeXTCP}>XTCP (P2P TCP)</option>
-              </select>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择代理类型" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ProxyType.ProxyTypeHTTP}>HTTP</SelectItem>
+                  <SelectItem value={ProxyType.ProxyTypeHTTPS}>HTTPS</SelectItem>
+                  <SelectItem value={ProxyType.ProxyTypeTCP}>TCP</SelectItem>
+                  <SelectItem value={ProxyType.ProxyTypeSTCP}>STCP (秘密 TCP)</SelectItem>
+                  <SelectItem value={ProxyType.ProxyTypeXTCP}>XTCP (P2P TCP)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div>

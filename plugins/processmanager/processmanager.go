@@ -16,13 +16,28 @@ import (
 	"ltools/internal/plugins"
 )
 
+// =============================================================================
+// 常量定义
+// =============================================================================
+
 const (
 	PluginID      = "processmanager.builtin"
 	PluginName    = "进程管理器"
 	PluginVersion = "1.0.0"
+
+	// 性能优化超时设置
+	cpuTimeout        = 5 * time.Millisecond  // CPU 获取专用（更严格）
+	processTimeout    = 150 * time.Millisecond // 整个进程信息获取超时
+	maxConcurrentProc = 15                     // 最大并发进程查询数
+	refreshInterval   = 10 * time.Second       // 刷新间隔
+	operationTimeout  = 5 * time.Second        // 操作超时
 )
 
-// ProcessInfo contains information about a process
+// =============================================================================
+// 类型定义
+// =============================================================================
+
+// ProcessInfo 包含进程的详细信息
 type ProcessInfo struct {
 	PID            int     `json:"pid"`
 	Name           string  `json:"name"`
@@ -36,46 +51,62 @@ type ProcessInfo struct {
 	Username       string  `json:"username"`
 	CreateTime     int64   `json:"createTime"`
 	NumThreads     int     `json:"numThreads"`
-	NumFDs         int     `json:"numFds"` // File descriptors / handles
+	NumFDs         int     `json:"numFds"`
 	IsSystem       bool    `json:"isSystem"`
+	// 性能优化字段
+	PartialData bool   `json:"partialData"`  // 是否为降级数据
+	ErrorReason string `json:"errorReason"`  // 错误原因
 }
 
-// ProcessListOptions contains options for querying the process list
+// ProcessListOptions 进程列表查询选项
 type ProcessListOptions struct {
-	SearchTerm  string `json:"searchTerm"`
-	SortBy      string `json:"sortBy"` // "pid", "name", "cpu", "memory"
-	SortDesc    bool   `json:"sortDesc"`
-	ShowSystem  bool   `json:"showSystem"`
-	Limit       int    `json:"limit"`    // 0 means no limit
-	Offset      int    `json:"offset"`   // For pagination
+	SearchTerm string `json:"searchTerm"`
+	SortBy     string `json:"sortBy"` // "pid", "name", "cpu", "memory"
+	SortDesc   bool   `json:"sortDesc"`
+	ShowSystem bool   `json:"showSystem"`
+	Limit      int    `json:"limit"`
+	Offset     int    `json:"offset"`
 }
 
-// ProcessUpdateEvent represents a process list update event
+// ProcessUpdateEvent 进程更新事件
 type ProcessUpdateEvent struct {
-	Type     string         `json:"type"`     // "added", "updated", "removed", "full"
-	Added    []*ProcessInfo `json:"added"`
-	Updated  []*ProcessInfo `json:"updated"`
-	Removed  []int          `json:"removed"`  // PIDs of removed processes
-	FullList []*ProcessInfo `json:"fullList"`
-	Timestamp int64         `json:"timestamp"`
+	Type      string         `json:"type"` // "added", "updated", "removed", "full"
+	Added     []*ProcessInfo `json:"added"`
+	Updated   []*ProcessInfo `json:"updated"`
+	Removed   []int          `json:"removed"`
+	FullList  []*ProcessInfo `json:"fullList"`
+	Timestamp int64          `json:"timestamp"`
 }
 
-// ProcessManagerPlugin provides process management functionality
+// processBlacklist 进程黑名单（用于跳过问题进程）
+type processBlacklist struct {
+	mu          sync.RWMutex
+	skipCPU     map[int32]string // PID -> 跳过CPU查询的原因
+	skipMemory  map[int32]string // PID -> 跳过内存查询的原因
+	skipAll     map[int32]string // PID -> 完全跳过的原因
+	knownZombie map[string]bool  // 已知的僵尸进程名称
+}
+
+// ProcessManagerPlugin 进程管理器插件
 type ProcessManagerPlugin struct {
 	*plugins.BasePlugin
-	app              *application.App
-	processCache     map[int]*ProcessInfo
-	lastSnapshot     map[int]*ProcessInfo
-	cacheMutex       sync.RWMutex
-	stopChan         chan struct{}
-	refreshInterval  time.Duration
-	systemUsernames  map[string]bool
-	systemPaths      []string
-	viewActive       bool          // 是否在前台显示中
-	refreshControl   chan struct{} // 用于控制刷新 goroutine 的生命周期
+	app             *application.App
+	processCache    map[int]*ProcessInfo
+	lastSnapshot    map[int]*ProcessInfo
+	cacheMutex      sync.RWMutex
+	stopChan        chan struct{}
+	refreshControl  chan struct{}
+	systemUsernames map[string]bool
+	systemPaths     []string
+	viewActive      bool
+	blacklist       *processBlacklist
 }
 
-// NewProcessManagerPlugin creates a new process manager plugin
+// =============================================================================
+// 构造函数
+// =============================================================================
+
+// NewProcessManagerPlugin 创建进程管理器插件实例
 func NewProcessManagerPlugin() *ProcessManagerPlugin {
 	metadata := &plugins.PluginMetadata{
 		ID:          PluginID,
@@ -86,132 +117,193 @@ func NewProcessManagerPlugin() *ProcessManagerPlugin {
 		Icon:        "process",
 		Type:        plugins.PluginTypeBuiltIn,
 		State:       plugins.PluginStateInstalled,
-		Permissions: []plugins.Permission{
-			plugins.PermissionProcess,
-		},
-		Keywords: []string{"进程", "管理", "任务", "process", "task", "manager"},
+		Permissions: []plugins.Permission{plugins.PermissionProcess},
+		Keywords:    []string{"进程", "管理", "任务", "process", "task", "manager"},
 	}
 
-	base := plugins.NewBasePlugin(metadata)
 	return &ProcessManagerPlugin{
-		BasePlugin:      base,
+		BasePlugin:      plugins.NewBasePlugin(metadata),
 		processCache:    make(map[int]*ProcessInfo),
 		lastSnapshot:    make(map[int]*ProcessInfo),
 		stopChan:        make(chan struct{}),
-		refreshInterval: 10 * time.Second, // 增加到10秒，减少频繁刷新
 		systemUsernames: make(map[string]bool),
 		systemPaths:     getSystemProcessPaths(),
+		blacklist:       newBlacklist(),
 	}
 }
 
-// getSystemProcessPaths returns paths that indicate system processes
-func getSystemProcessPaths() []string {
-	switch runtime.GOOS {
-	case "darwin":
-		return []string{
-			"/System/",
-			"/Library/",
-			"/usr/",
-			"/bin/",
-			"/sbin/",
-			"/dev/",
-		}
-	case "linux":
-		return []string{
-			"/usr/",
-			"/bin/",
-			"/sbin/",
-			"/lib/",
-			"/opt/",
-			"/dev/",
-		}
-	case "windows":
-		return []string{
-			"\\Windows\\",
-			"\\Program Files\\",
-			"\\Program Files (x86)\\",
-			"\\ProgramData\\",
-			"System32",
-			"SysWOW64",
-		}
-	default:
-		return []string{}
+// newBlacklist 创建黑名单实例
+func newBlacklist() *processBlacklist {
+	return &processBlacklist{
+		skipCPU:    make(map[int32]string),
+		skipMemory: make(map[int32]string),
+		skipAll:    make(map[int32]string),
+		knownZombie: map[string]bool{
+			"(zombie)": true,
+			"defunct":  true,
+		},
 	}
 }
 
-// Init initializes the plugin
+// =============================================================================
+// 生命周期方法
+// =============================================================================
+
+// Init 初始化插件
 func (p *ProcessManagerPlugin) Init(app *application.App) error {
 	if err := p.BasePlugin.Init(app); err != nil {
 		return err
 	}
 	p.app = app
-
-	// Detect system usernames
 	p.detectSystemUsernames()
-
 	return nil
 }
 
-// detectSystemUsernames detects which usernames are considered system users
-func (p *ProcessManagerPlugin) detectSystemUsernames() {
-	// Add common system usernames
-	systemUsers := []string{
-		"root",
-		"SYSTEM",
-		"LOCAL SERVICE",
-		"NETWORK SERVICE",
-		"daemon",
-		"nobody",
-		"_spotlight",
-		"_mbsetupuser",
-	}
-
-	// Get current username
-	if currentUser := getCurrentUsername(); currentUser != "" {
-		p.systemUsernames[currentUser] = false // Not a system user
-	}
-
-	for _, user := range systemUsers {
-		p.systemUsernames[user] = true
-	}
-}
-
-// getCurrentUsername returns the current username
-func getCurrentUsername() string {
-	if runtime.GOOS == "windows" {
-		return getEnv("USERNAME")
-	}
-	return getEnv("USER")
-}
-
-// getEnv gets an environment variable
-func getEnv(key string) string {
-	return os.Getenv(key)
-}
-
-// ServiceStartup is called when the application starts
+// ServiceStartup 服务启动
 func (p *ProcessManagerPlugin) ServiceStartup(app *application.App) error {
-	if err := p.BasePlugin.ServiceStartup(app); err != nil {
-		return err
-	}
-
-	// 不再自动启动后台刷新，等待用户打开插件时再启动
-	// go p.refreshPeriodically() // <-- 移除这行
-
-	return nil
+	return p.BasePlugin.ServiceStartup(app)
 }
 
-// ServiceShutdown is called when the application shuts down
+// ServiceShutdown 服务关闭
 func (p *ProcessManagerPlugin) ServiceShutdown(app *application.App) error {
 	close(p.stopChan)
 	return p.BasePlugin.ServiceShutdown(app)
 }
 
-// refreshPeriodically refreshes process list periodically and sends incremental updates
+// OnViewEnter 进入视图时启动后台刷新
+func (p *ProcessManagerPlugin) OnViewEnter(app *application.App) error {
+	p.viewActive = true
+	p.refreshControl = make(chan struct{})
+
+	// 立即执行一次刷新
+	go p.refreshProcesses()
+
+	// 启动后台定时刷新
+	go p.refreshPeriodically()
+
+	return nil
+}
+
+// OnViewLeave 离开视图时停止后台刷新
+func (p *ProcessManagerPlugin) OnViewLeave(app *application.App) error {
+	p.viewActive = false
+	if p.refreshControl != nil {
+		close(p.refreshControl)
+		p.refreshControl = nil
+	}
+	return nil
+}
+
+// =============================================================================
+// 公共服务方法（前端 API）
+// =============================================================================
+
+// GetProcesses 获取进程列表
+func (p *ProcessManagerPlugin) GetProcesses(options ProcessListOptions) ([]*ProcessInfo, int, error) {
+	p.cacheMutex.RLock()
+	cachedProcesses := make([]*ProcessInfo, 0, len(p.processCache))
+	for _, proc := range p.processCache {
+		cachedProcesses = append(cachedProcesses, proc)
+	}
+	p.cacheMutex.RUnlock()
+
+	// 应用过滤
+	cachedProcesses = p.filterProcesses(cachedProcesses, options)
+
+	// 排序
+	p.sortProcesses(cachedProcesses, options.SortBy, options.SortDesc)
+
+	total := len(cachedProcesses)
+
+	// 分页
+	if options.Limit > 0 {
+		cachedProcesses = p.paginate(cachedProcesses, options.Offset, options.Limit)
+	}
+
+	return cachedProcesses, total, nil
+}
+
+// GetProcessDetail 获取单个进程详情
+func (p *ProcessManagerPlugin) GetProcessDetail(pid int) (*ProcessInfo, error) {
+	ctx := context.Background()
+	_, err := process.NewProcessWithContext(ctx, int32(pid))
+	if err != nil {
+		return nil, fmt.Errorf("进程不存在: %w", err)
+	}
+
+	info := p.getProcessInfo(ctx, int32(pid))
+	if info == nil {
+		return nil, fmt.Errorf("获取进程信息失败")
+	}
+	return info, nil
+}
+
+// KillProcess 终止进程（先尝试优雅终止，失败则强制）
+func (p *ProcessManagerPlugin) KillProcess(pid int) error {
+	ctx := context.Background()
+	proc, err := process.NewProcessWithContext(ctx, int32(pid))
+	if err != nil {
+		return fmt.Errorf("进程不存在: %w", err)
+	}
+
+	if err := proc.Terminate(); err != nil {
+		if killErr := proc.Kill(); killErr != nil {
+			return fmt.Errorf("终止进程失败: %w", killErr)
+		}
+	}
+
+	p.emitKill(pid)
+	return nil
+}
+
+// ForceKillProcess 强制终止进程
+func (p *ProcessManagerPlugin) ForceKillProcess(pid int) error {
+	ctx := context.Background()
+	proc, err := process.NewProcessWithContext(ctx, int32(pid))
+	if err != nil {
+		return fmt.Errorf("进程不存在: %w", err)
+	}
+
+	if err := proc.Kill(); err != nil {
+		return fmt.Errorf("强制终止进程失败: %w", err)
+	}
+
+	p.emitKill(pid)
+	return nil
+}
+
+// ForceRefresh 强制刷新进程列表
+func (p *ProcessManagerPlugin) ForceRefresh() {
+	p.refreshProcesses()
+}
+
+// GetSystemInfo 获取系统信息
+func (p *ProcessManagerPlugin) GetSystemInfo() map[string]interface{} {
+	result := make(map[string]interface{})
+
+	if hostInfo, err := host.Info(); err == nil {
+		result["hostname"] = hostInfo.Hostname
+		result["uptime"] = hostInfo.Uptime
+		result["bootTime"] = hostInfo.BootTime
+		result["procCount"] = hostInfo.Procs
+	}
+
+	result["os"] = runtime.GOOS
+	result["arch"] = runtime.GOARCH
+
+	return result
+}
+
+// =============================================================================
+// 内部方法 - 刷新逻辑
+// =============================================================================
+
+// refreshPeriodically 定期刷新进程列表
 func (p *ProcessManagerPlugin) refreshPeriodically() {
-	ticker := time.NewTicker(p.refreshInterval)
+	ticker := time.NewTicker(refreshInterval)
 	defer ticker.Stop()
 
+	// 延迟首次刷新，避免启动时卡顿
 	time.Sleep(3 * time.Second)
 
 	for {
@@ -223,42 +315,40 @@ func (p *ProcessManagerPlugin) refreshPeriodically() {
 		case <-p.stopChan:
 			return
 		case <-p.refreshControl:
-			return // 收到离开视图信号
+			return
 		}
 	}
 }
 
-// refreshProcesses refreshes the process cache and sends incremental updates
+// refreshProcesses 刷新进程缓存并发送更新事件
 func (p *ProcessManagerPlugin) refreshProcesses() {
-	// 添加超时控制，避免操作挂起
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
 	defer cancel()
 
 	processes, err := p.getProcessesInternal(ctx, ProcessListOptions{})
 	if err != nil {
-		p.emitError(fmt.Sprintf("Failed to refresh processes: %v", err))
+		p.emitError(fmt.Sprintf("刷新进程列表失败: %v", err))
 		return
 	}
 
 	p.cacheMutex.Lock()
 	defer p.cacheMutex.Unlock()
 
-	// Calculate differences
+	// 计算差异并发送事件
 	event := p.calculateDiff(processes)
 
-	// Update cache
+	// 更新缓存
 	p.processCache = make(map[int]*ProcessInfo)
 	for _, proc := range processes {
 		p.processCache[proc.PID] = proc
 	}
 
-	// Emit update event if there are changes
 	if event != nil {
 		p.emitUpdate(event)
 	}
 }
 
-// calculateDiff calculates the difference between the last snapshot and new processes
+// calculateDiff 计算进程变化差异
 func (p *ProcessManagerPlugin) calculateDiff(newProcesses []*ProcessInfo) *ProcessUpdateEvent {
 	event := &ProcessUpdateEvent{
 		Type:      "incremental",
@@ -273,7 +363,7 @@ func (p *ProcessManagerPlugin) calculateDiff(newProcesses []*ProcessInfo) *Proce
 		newProcessMap[proc.PID] = proc
 	}
 
-	// Find added and updated processes
+	// 查找新增和更新的进程
 	for pid, newProc := range newProcessMap {
 		oldProc, exists := p.lastSnapshot[pid]
 		if !exists {
@@ -283,14 +373,14 @@ func (p *ProcessManagerPlugin) calculateDiff(newProcesses []*ProcessInfo) *Proce
 		}
 	}
 
-	// Find removed processes
+	// 查找移除的进程
 	for pid := range p.lastSnapshot {
 		if _, exists := newProcessMap[pid]; !exists {
 			event.Removed = append(event.Removed, pid)
 		}
 	}
 
-	// If this is the first update or too many changes, send full list
+	// 首次更新或变化过多时发送完整列表
 	if len(p.lastSnapshot) == 0 || len(event.Added) > 50 || len(event.Removed) > 50 {
 		event.Type = "full"
 		event.FullList = newProcesses
@@ -299,7 +389,7 @@ func (p *ProcessManagerPlugin) calculateDiff(newProcesses []*ProcessInfo) *Proce
 		event.Removed = nil
 	}
 
-	// Update last snapshot
+	// 更新快照
 	p.lastSnapshot = make(map[int]*ProcessInfo)
 	for k, v := range newProcessMap {
 		p.lastSnapshot[k] = v
@@ -308,79 +398,25 @@ func (p *ProcessManagerPlugin) calculateDiff(newProcesses []*ProcessInfo) *Proce
 	return event
 }
 
-// hasProcessChanged checks if a process has significantly changed
+// hasProcessChanged 检查进程是否有显著变化
 func (p *ProcessManagerPlugin) hasProcessChanged(old, new *ProcessInfo) bool {
-	// Check if CPU or memory changed significantly
-	cpuChanged := abs(old.CPUPercent-new.CPUPercent) > 1.0
-	memoryChanged := abs(float64(old.MemoryPercent)-float64(new.MemoryPercent)) > 0.5
-	statusChanged := old.Status != new.Status
-
-	return cpuChanged || memoryChanged || statusChanged
+	return abs(old.CPUPercent-new.CPUPercent) > 1.0 ||
+		abs(float64(old.MemoryPercent)-float64(new.MemoryPercent)) > 0.5 ||
+		old.Status != new.Status
 }
 
-// abs returns the absolute value of a float64
-func abs(x float64) float64 {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
+// =============================================================================
+// 内部方法 - 进程信息获取
+// =============================================================================
 
-// GetProcesses returns the list of processes based on the given options
-func (p *ProcessManagerPlugin) GetProcesses(options ProcessListOptions) ([]*ProcessInfo, int, error) {
-	p.cacheMutex.RLock()
-	cachedProcesses := make([]*ProcessInfo, 0, len(p.processCache))
-	for _, proc := range p.processCache {
-		cachedProcesses = append(cachedProcesses, proc)
-	}
-	p.cacheMutex.RUnlock()
-
-	// 应用搜索过滤
-	if options.SearchTerm != "" || !options.ShowSystem {
-		filtered := make([]*ProcessInfo, 0, len(cachedProcesses))
-		for _, proc := range cachedProcesses {
-			if options.SearchTerm != "" && !p.matchesSearch(proc, options.SearchTerm) {
-				continue
-			}
-			if !options.ShowSystem && proc.IsSystem {
-				continue
-			}
-			filtered = append(filtered, proc)
-		}
-		cachedProcesses = filtered
-	}
-
-	// 排序
-	p.sortProcesses(cachedProcesses, options.SortBy, options.SortDesc)
-
-	total := len(cachedProcesses)
-
-	// Apply pagination
-	if options.Limit > 0 {
-		start := options.Offset
-		if start >= len(cachedProcesses) {
-			return []*ProcessInfo{}, total, nil
-		}
-		end := start + options.Limit
-		if end > len(cachedProcesses) {
-			end = len(cachedProcesses)
-		}
-		cachedProcesses = cachedProcesses[start:end]
-	}
-
-	return cachedProcesses, total, nil
-}
-
-// getProcessesInternal is the internal implementation for getting processes
+// getProcessesInternal 内部获取进程列表实现
 func (p *ProcessManagerPlugin) getProcessesInternal(ctx context.Context, options ProcessListOptions) ([]*ProcessInfo, error) {
-	// Get all PIDs
 	pids, err := process.Pids()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get process list: %w", err)
+		return nil, fmt.Errorf("获取进程列表失败: %w", err)
 	}
 
-	// Use semaphore to limit concurrent goroutines
-	sem := make(chan struct{}, 10) // 减少到10个并发，降低系统负载
+	sem := make(chan struct{}, maxConcurrentProc)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	processes := make([]*ProcessInfo, 0, len(pids))
@@ -389,19 +425,11 @@ func (p *ProcessManagerPlugin) getProcessesInternal(ctx context.Context, options
 		wg.Add(1)
 		go func(pid int32) {
 			defer wg.Done()
-			sem <- struct{}{}        // Acquire
-			defer func() { <-sem }() // Release
+			sem <- struct{}{}
+			defer func() { <-sem }()
 
 			procInfo := p.getProcessInfo(ctx, pid)
 			if procInfo != nil {
-				// Apply filters
-				if options.SearchTerm != "" && !p.matchesSearch(procInfo, options.SearchTerm) {
-					return
-				}
-				if !options.ShowSystem && procInfo.IsSystem {
-					return
-				}
-
 				mu.Lock()
 				processes = append(processes, procInfo)
 				mu.Unlock()
@@ -410,110 +438,143 @@ func (p *ProcessManagerPlugin) getProcessesInternal(ctx context.Context, options
 	}
 
 	wg.Wait()
-
-	// Sort processes
 	p.sortProcesses(processes, options.SortBy, options.SortDesc)
-
 	return processes, nil
 }
 
-// getProcessInfo gets information about a single process
+// getProcessInfo 获取单个进程信息（带超时控制和降级策略）
 func (p *ProcessManagerPlugin) getProcessInfo(ctx context.Context, pid int32) *ProcessInfo {
-	proc, err := process.NewProcessWithContext(ctx, pid)
+	// 检查黑名单
+	p.blacklist.mu.RLock()
+	skipCPU := p.blacklist.skipCPU[pid]
+	skipMemory := p.blacklist.skipMemory[pid]
+	p.blacklist.mu.RUnlock()
+
+	// 创建带超时的上下文
+	procCtx, cancel := context.WithTimeout(ctx, processTimeout)
+	defer cancel()
+
+	proc, err := process.NewProcessWithContext(procCtx, pid)
 	if err != nil {
-		// Process may have exited or we don't have permission
 		return nil
 	}
 
 	info := &ProcessInfo{PID: int(pid)}
 
-	// Get name
+	// 获取进程名
 	if name, err := proc.Name(); err == nil {
 		info.Name = name
+		// 检查僵尸进程
+		p.blacklist.mu.RLock()
+		isZombie := p.blacklist.knownZombie[strings.ToLower(name)]
+		p.blacklist.mu.RUnlock()
+		if isZombie {
+			info.PartialData = true
+			info.ErrorReason = "僵尸进程"
+			return info
+		}
 	}
 
-	// Get executable path
-	if exe, err := proc.Exe(); err == nil {
-		info.ExecutablePath = exe
+	// 获取状态
+	if status, err := proc.Status(); err == nil && len(status) > 0 {
+		info.Status = status[0]
+		if info.Status == "Z" {
+			info.PartialData = true
+			info.ErrorReason = "僵尸进程"
+			p.blacklist.mu.Lock()
+			p.blacklist.skipCPU[pid] = "僵尸进程"
+			p.blacklist.skipMemory[pid] = "僵尸进程"
+			p.blacklist.mu.Unlock()
+			return info
+		}
 	}
 
-	// Get command line
-	if cmdline, err := proc.CmdlineSlice(); err == nil && len(cmdline) > 0 {
+	// 获取其他信息
+	info.ExecutablePath, _ = proc.Exe()
+	if cmdline, err := proc.CmdlineSlice(); err == nil {
 		info.CmdLine = strings.Join(cmdline, " ")
 	}
 
-	// Get CPU percent - 使用非常短的超时时间避免阻塞
-	// 跳过CPU使用率获取以提高性能，或者使用更短的时间
-	cpuCtx, cpuCancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cpuCancel()
-	if cpuPercent, err := proc.CPUPercentWithContext(cpuCtx); err == nil {
-		info.CPUPercent = cpuPercent
+	// CPU（带黑名单检查）
+	if skipCPU == "" {
+		cpuCtx, cpuCancel := context.WithTimeout(context.Background(), cpuTimeout)
+		if cpuPercent, err := proc.CPUPercentWithContext(cpuCtx); err == nil {
+			info.CPUPercent = cpuPercent
+		} else {
+			p.blacklist.mu.Lock()
+			p.blacklist.skipCPU[pid] = "CPU查询超时"
+			p.blacklist.mu.Unlock()
+		}
+		cpuCancel()
 	}
 
-	// Get memory info
-	if memInfo, err := proc.MemoryInfo(); err == nil {
-		info.MemoryBytes = memInfo.RSS
-		info.MemoryMB = float64(memInfo.RSS) / 1024 / 1024
+	// 内存（带黑名单检查）
+	if skipMemory == "" {
+		if memInfo, err := proc.MemoryInfo(); err == nil {
+			info.MemoryBytes = memInfo.RSS
+			info.MemoryMB = float64(memInfo.RSS) / 1024 / 1024
+		}
+		if memPercent, err := proc.MemoryPercent(); err == nil {
+			info.MemoryPercent = memPercent
+		}
 	}
 
-	if memPercent, err := proc.MemoryPercent(); err == nil {
-		info.MemoryPercent = memPercent
-	}
-
-	// Get status
-	if status, err := proc.Status(); err == nil && len(status) > 0 {
-		info.Status = status[0]
-	}
-
-	// Get username
+	// 其他属性
 	if username, err := proc.Username(); err == nil {
-		// Extract just the username part (before the domain)
 		if idx := strings.Index(username, "\\"); idx != -1 {
 			info.Username = username[idx+1:]
 		} else {
 			info.Username = username
 		}
 	}
-
-	// Get create time
-	if create_time, err := proc.CreateTime(); err == nil {
-		info.CreateTime = create_time
-	}
-
-	// Get num threads
+	info.CreateTime, _ = proc.CreateTime()
 	if numThreads, err := proc.NumThreads(); err == nil {
 		info.NumThreads = int(numThreads)
 	}
-
-	// Get num file descriptors/handles
 	if numFDs, err := proc.NumFDs(); err == nil {
 		info.NumFDs = int(numFDs)
 	}
 
-	// Determine if it's a system process
 	info.IsSystem = p.isSystemProcess(info)
-
 	return info
 }
 
-// isSystemProcess determines if a process is a system process
-func (p *ProcessManagerPlugin) isSystemProcess(info *ProcessInfo) bool {
-	// Check by username
-	if p.systemUsernames[info.Username] {
-		return true
+// =============================================================================
+// 辅助方法
+// =============================================================================
+
+// filterProcesses 过滤进程列表
+func (p *ProcessManagerPlugin) filterProcesses(processes []*ProcessInfo, options ProcessListOptions) []*ProcessInfo {
+	if options.SearchTerm == "" && options.ShowSystem {
+		return processes
 	}
 
-	// Check by path
-	for _, sysPath := range p.systemPaths {
-		if strings.Contains(info.ExecutablePath, sysPath) {
-			return true
+	filtered := make([]*ProcessInfo, 0, len(processes))
+	for _, proc := range processes {
+		if options.SearchTerm != "" && !p.matchesSearch(proc, options.SearchTerm) {
+			continue
 		}
+		if !options.ShowSystem && proc.IsSystem {
+			continue
+		}
+		filtered = append(filtered, proc)
 	}
-
-	return false
+	return filtered
 }
 
-// matchesSearch checks if a process matches the search term
+// paginate 分页
+func (p *ProcessManagerPlugin) paginate(processes []*ProcessInfo, offset, limit int) []*ProcessInfo {
+	if offset >= len(processes) {
+		return []*ProcessInfo{}
+	}
+	end := offset + limit
+	if end > len(processes) {
+		end = len(processes)
+	}
+	return processes[offset:end]
+}
+
+// matchesSearch 检查进程是否匹配搜索词
 func (p *ProcessManagerPlugin) matchesSearch(info *ProcessInfo, term string) bool {
 	term = strings.ToLower(term)
 	searchStrings := []string{
@@ -522,17 +583,15 @@ func (p *ProcessManagerPlugin) matchesSearch(info *ProcessInfo, term string) boo
 		strings.ToLower(info.CmdLine),
 		fmt.Sprintf("%d", info.PID),
 	}
-
 	for _, s := range searchStrings {
 		if strings.Contains(s, term) {
 			return true
 		}
 	}
-
 	return false
 }
 
-// sortProcesses sorts the process list
+// sortProcesses 排序进程列表
 func (p *ProcessManagerPlugin) sortProcesses(processes []*ProcessInfo, sortBy string, desc bool) {
 	sort.Slice(processes, func(i, j int) bool {
 		var less bool
@@ -543,12 +602,9 @@ func (p *ProcessManagerPlugin) sortProcesses(processes []*ProcessInfo, sortBy st
 			less = processes[i].CPUPercent < processes[j].CPUPercent
 		case "memory":
 			less = processes[i].MemoryMB < processes[j].MemoryMB
-		case "pid":
-			fallthrough
 		default:
 			less = processes[i].PID < processes[j].PID
 		}
-
 		if desc {
 			return !less
 		}
@@ -556,87 +612,66 @@ func (p *ProcessManagerPlugin) sortProcesses(processes []*ProcessInfo, sortBy st
 	})
 }
 
-// GetProcessDetail returns detailed information about a single process
-func (p *ProcessManagerPlugin) GetProcessDetail(pid int) (*ProcessInfo, error) {
-	ctx := context.Background()
-	_, err := process.NewProcessWithContext(ctx, int32(pid))
-	if err != nil {
-		return nil, fmt.Errorf("process not found: %w", err)
+// isSystemProcess 判断是否为系统进程
+func (p *ProcessManagerPlugin) isSystemProcess(info *ProcessInfo) bool {
+	if p.systemUsernames[info.Username] {
+		return true
 	}
-
-	info := p.getProcessInfo(ctx, int32(pid))
-	if info == nil {
-		return nil, fmt.Errorf("failed to get process info")
-	}
-
-	return info, nil
-}
-
-// KillProcess terminates a process
-func (p *ProcessManagerPlugin) KillProcess(pid int) error {
-	ctx := context.Background()
-	proc, err := process.NewProcessWithContext(ctx, int32(pid))
-	if err != nil {
-		return fmt.Errorf("process not found: %w", err)
-	}
-
-	// Try graceful termination first
-	if err := proc.Terminate(); err != nil {
-		// If that fails, try force kill
-		if killErr := proc.Kill(); killErr != nil {
-			return fmt.Errorf("failed to kill process: %w", killErr)
+	for _, sysPath := range p.systemPaths {
+		if strings.Contains(info.ExecutablePath, sysPath) {
+			return true
 		}
 	}
-
-	p.emitKill(pid)
-	return nil
+	return false
 }
 
-// ForceKillProcess forcefully terminates a process using SIGKILL
-func (p *ProcessManagerPlugin) ForceKillProcess(pid int) error {
-	ctx := context.Background()
-	proc, err := process.NewProcessWithContext(ctx, int32(pid))
-	if err != nil {
-		return fmt.Errorf("process not found: %w", err)
+// detectSystemUsernames 检测系统用户名
+func (p *ProcessManagerPlugin) detectSystemUsernames() {
+	systemUsers := []string{"root", "SYSTEM", "LOCAL SERVICE", "NETWORK SERVICE", "daemon", "nobody", "_spotlight", "_mbsetupuser"}
+	for _, user := range systemUsers {
+		p.systemUsernames[user] = true
 	}
-
-	// Force kill using SIGKILL
-	if err := proc.Kill(); err != nil {
-		return fmt.Errorf("failed to force kill process: %w", err)
+	if currentUser := getCurrentUsername(); currentUser != "" {
+		p.systemUsernames[currentUser] = false
 	}
-
-	p.emitKill(pid)
-	return nil
 }
 
-// ForceRefresh forces an immediate refresh of the process list
-func (p *ProcessManagerPlugin) ForceRefresh() {
-	p.refreshProcesses()
-}
-
-// GetSystemInfo returns system information for process management
-func (p *ProcessManagerPlugin) GetSystemInfo() map[string]interface{} {
-	result := make(map[string]interface{})
-
-	// Get host info
-	if hostInfo, err := host.Info(); err == nil {
-		result["hostname"] = hostInfo.Hostname
-		result["uptime"] = hostInfo.Uptime
-		result["bootTime"] = hostInfo.BootTime
-		result["procCount"] = hostInfo.Procs
+// getSystemProcessPaths 获取系统进程路径
+func getSystemProcessPaths() []string {
+	switch runtime.GOOS {
+	case "darwin":
+		return []string{"/System/", "/Library/", "/usr/", "/bin/", "/sbin/", "/dev/"}
+	case "linux":
+		return []string{"/usr/", "/bin/", "/sbin/", "/lib/", "/opt/", "/dev/"}
+	case "windows":
+		return []string{"\\Windows\\", "\\Program Files\\", "\\Program Files (x86)\\", "\\ProgramData\\", "System32", "SysWOW64"}
+	default:
+		return []string{}
 	}
-
-	result["os"] = runtime.GOOS
-	result["arch"] = runtime.GOARCH
-
-	return result
 }
 
-// Event emission helpers
+// getCurrentUsername 获取当前用户名
+func getCurrentUsername() string {
+	if runtime.GOOS == "windows" {
+		return os.Getenv("USERNAME")
+	}
+	return os.Getenv("USER")
+}
+
+// abs 绝对值
+func abs(x float64) float64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// =============================================================================
+// 事件发射
+// =============================================================================
+
 func (p *ProcessManagerPlugin) emitUpdate(event *ProcessUpdateEvent) {
 	if p.app != nil {
-		// For now, just emit a simple timestamp
-		// The full event data can be sent via JSON serialization if needed
 		p.app.Event.Emit("processmanager:updated", fmt.Sprintf("%d", event.Timestamp))
 	}
 }
@@ -651,28 +686,4 @@ func (p *ProcessManagerPlugin) emitError(message string) {
 	if p.app != nil {
 		p.app.Event.Emit("processmanager:error", message)
 	}
-}
-
-// OnViewEnter starts background refresh when user opens the plugin
-func (p *ProcessManagerPlugin) OnViewEnter(app *application.App) error {
-	p.viewActive = true
-	p.refreshControl = make(chan struct{})
-
-	// 立即执行一次刷新
-	go p.refreshProcesses()
-
-	// 启动后台定时刷新
-	go p.refreshPeriodically()
-
-	return nil
-}
-
-// OnViewLeave stops background refresh when user leaves the plugin
-func (p *ProcessManagerPlugin) OnViewLeave(app *application.App) error {
-	p.viewActive = false
-	if p.refreshControl != nil {
-		close(p.refreshControl)
-		p.refreshControl = nil
-	}
-	return nil
 }
