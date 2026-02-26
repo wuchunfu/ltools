@@ -86,9 +86,17 @@ ltools/
 │   ├── screenshot/      # 截图工具
 │   └── sysinfo/         # 系统信息
 ├── frontend/            # React + TypeScript 前端
-│   ├── src/            # 源代码
-│   ├── bindings/       # 自动生成的 Wails 绑定（请勿编辑）
-│   └── dist/           # 构建后的前端资源
+│   ├── src/
+│   │   ├── router/           # React Router v6 路由系统
+│   │   │   ├── routes/       # 路由配置
+│   │   │   ├── guards/       # 路由守卫（插件生命周期）
+│   │   │   └── layouts/      # 布局组件
+│   │   ├── pages/            # 页面组件
+│   │   ├── windows/          # 独立窗口组件
+│   │   ├── hooks/            # 自定义 Hooks
+│   │   └── components/       # UI 组件
+│   ├── bindings/             # 自动生成的 Wails 绑定（请勿编辑）
+│   └── dist/                 # 构建后的前端资源
 ├── build/              # 构建配置
 │   ├── config.yml      # 应用配置
 │   └── Taskfile.yml    # 构建任务
@@ -373,6 +381,7 @@ Events.On('myevent:data', (ev: { data: string }) => {
 
 **核心：**
 - React 18.2 + TypeScript 5.2
+- React Router v6 路由管理
 - Vite 5 构建工具
 - TailwindCSS 4 样式
 - `@wailsio/runtime` Go 绑定
@@ -428,27 +437,56 @@ Events.On('myevent:data', (ev: { data: string }) => {
 - `usePlugin(id)`：单个插件详情
 - `useDateTime()`：日期时间特定功能
 - `useToast()`：通知管理
+- `useGlobalShortcuts()`：全局快捷键事件监听和导航
 
 ### 路由和导航
 
+**技术栈：** React Router v6
+
+**路由架构：**
+```
+frontend/src/router/
+├── index.tsx              # 路由入口，检测窗口类型
+├── types.ts               # 路由类型定义
+├── routes/
+│   ├── mainRoutes.tsx     # 主应用路由（首页、插件、设置）
+│   └── windowRoutes.tsx   # 独立窗口路由（搜索、截图、贴图）
+├── guards/
+│   └── pluginGuard.tsx    # 插件生命周期守卫
+└── layouts/
+    └── MainLayout.tsx     # 主布局（侧边栏 + Outlet）
+```
+
+**URL 格式：**
+- 首页：`/`
+- 插件市场：`/plugins`
+- 设置：`/settings`
+- 插件页面：`/plugins/{pluginId}`（如 `/plugins/clipboard.builtin`）
+- 搜索窗口：`/search`
+- 截图覆盖层：`/screenshot2-overlay`
+- 贴图窗口：`/pin-window?id={windowId}`
+
 **布局结构：**
-- 侧边栏导航（玻璃态设计）
-- 主内容区域（动态视图）
-- Toast 通知系统
-- 键盘事件监听器
+- `MainLayout`：侧边栏 + Outlet 嵌套路由
+- 独立窗口：无侧边栏的简化路由
 
 **导航系统：**
-- 基础导航项（Home、Screenshot、DateTime、Password、Plugins、Settings）
-- 动态插件项（从启用的插件自动生成）
-- 插件视图缓存以保持状态
+- `Sidebar` 组件使用 `useNavigate` 和 `useLocation`
+- 动态插件菜单项从启用的插件自动生成
+- 插件视图缓存通过组件结构保持状态
+
+**插件生命周期守卫：**
+- `PluginGuard` 统一管理插件的 enter/leave 回调
+- 支持 `registerPluginLifecycle()` 注册自定义处理函数
 
 ## 多窗口管理
 
 ### 窗口类型
 
-1. **主窗口**：主应用界面
+1. **主窗口**：主应用界面（使用 MainLayout）
 2. **搜索窗口**：无边框、始终置顶的搜索（Spotlight/Alfred 风格）
-3. **截图编辑器**：全屏标注工具
+3. **截图覆盖层**：全屏截图和标注工具
+4. **贴图窗口**：悬浮图片显示窗口
 
 ### 窗口通信
 - 基于事件的消息传递
