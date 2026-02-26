@@ -16,6 +16,9 @@ export interface Annotation {
   fontSize?: number; // 文字大小
   color?: string;
   strokeWidth?: number;
+  // 原始起始点（用于支持任意方向绘制）
+  startX?: number;
+  startY?: number;
 }
 
 // 标注状态
@@ -78,6 +81,9 @@ export function useAnnotation() {
       y,
       color: state.currentColor,
       strokeWidth: state.strokeWidth,
+      // 保存原始起始点（用于支持任意方向绘制矩形/椭圆）
+      startX: x,
+      startY: y,
     };
 
     if (state.currentType === 'brush') {
@@ -116,21 +122,23 @@ export function useAnnotation() {
           ...prev,
           currentAnnotation: {
             ...ann,
-            width: x - ann.x,
-            height: y - ann.y,
+            width: x - (ann.startX ?? ann.x),
+            height: y - (ann.startY ?? ann.y),
           },
         };
       }
 
-      // 对于矩形、椭圆等，使用绝对值
+      // 对于矩形、椭圆等，使用原始起始点计算（支持任意方向绘制）
+      const startX = ann.startX ?? ann.x;
+      const startY = ann.startY ?? ann.y;
       return {
         ...prev,
         currentAnnotation: {
           ...ann,
-          width: Math.abs(x - ann.x),
-          height: Math.abs(y - ann.y),
-          x: Math.min(ann.x, x),
-          y: Math.min(ann.y, y),
+          width: Math.abs(x - startX),
+          height: Math.abs(y - startY),
+          x: Math.min(startX, x),
+          y: Math.min(startY, y),
         },
       };
     });

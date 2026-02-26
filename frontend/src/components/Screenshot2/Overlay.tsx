@@ -311,7 +311,14 @@ const Screenshot2Overlay: React.FC = () => {
 
     // 如果正在标注绘制
     if (isAnnotating) {
-      updateDrawing(x, y);
+      // 限制画笔坐标在选区范围内
+      if (currentType === 'brush' && selection) {
+        const clampedX = Math.max(selection.x, Math.min(x, selection.x + selection.width));
+        const clampedY = Math.max(selection.y, Math.min(y, selection.y + selection.height));
+        updateDrawing(clampedX, clampedY);
+      } else {
+        updateDrawing(x, y);
+      }
       return;
     }
 
@@ -451,7 +458,14 @@ const Screenshot2Overlay: React.FC = () => {
 
     // 如果正在标注绘制
     if (isAnnotating) {
-      updateDrawing(x, y);
+      // 限制画笔坐标在选区范围内
+      if (currentType === 'brush' && selection) {
+        const clampedX = Math.max(selection.x, Math.min(x, selection.x + selection.width));
+        const clampedY = Math.max(selection.y, Math.min(y, selection.y + selection.height));
+        updateDrawing(clampedX, clampedY);
+      } else {
+        updateDrawing(x, y);
+      }
       return;
     }
 
@@ -522,7 +536,7 @@ const Screenshot2Overlay: React.FC = () => {
     const selHeight = Math.abs(y - startPos.y);
 
     setSelection({ x: selX, y: selY, width: selWidth, height: selHeight });
-  }, [isSelecting, isDraggingHandle, activeHandle, startPos, originalSelection, scaleFactor]);
+  }, [isSelecting, isDraggingHandle, isAnnotating, activeHandle, startPos, originalSelection, scaleFactor, currentType, selection, updateDrawing]);
 
   // 全局鼠标松开
   const handleGlobalMouseUp = useCallback(() => {
