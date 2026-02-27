@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
-
-	"ltools/plugins/bookmark"
 )
 
 // ChromeParser Chrome 书签解析器
@@ -83,7 +81,7 @@ type chromeBookmarkNode struct {
 }
 
 // Parse 解析 Chrome 书签
-func (p *ChromeParser) Parse() ([]bookmark.Bookmark, error) {
+func (p *ChromeParser) Parse() ([]Bookmark, error) {
 	path, err := p.GetBookmarksPath()
 	if err != nil {
 		return nil, err
@@ -99,7 +97,7 @@ func (p *ChromeParser) Parse() ([]bookmark.Bookmark, error) {
 		return nil, fmt.Errorf("failed to parse bookmarks JSON: %w", err)
 	}
 
-	var bookmarks []bookmark.Bookmark
+	var bookmarks []Bookmark
 
 	// 解析书签栏
 	bookmarks = append(bookmarks, p.parseNode(&chromeData.Roots.BookmarkBar, "书签栏")...)
@@ -114,8 +112,8 @@ func (p *ChromeParser) Parse() ([]bookmark.Bookmark, error) {
 }
 
 // parseNode 递归解析书签节点
-func (p *ChromeParser) parseNode(node *chromeBookmarkNode, folderPath string) []bookmark.Bookmark {
-	var bookmarks []bookmark.Bookmark
+func (p *ChromeParser) parseNode(node *chromeBookmarkNode, folderPath string) []Bookmark {
+	var bookmarks []Bookmark
 
 	if node.Type == "url" && node.URL != "" {
 		// 解析 Chrome 时间格式（WebKit timestamp: microseconds since 1601-01-01）
@@ -126,7 +124,7 @@ func (p *ChromeParser) parseNode(node *chromeBookmarkNode, folderPath string) []
 			}
 		}
 
-		bookmarks = append(bookmarks, bookmark.Bookmark{
+		bookmarks = append(bookmarks, Bookmark{
 			ID:      generateID(node.URL),
 			Title:   node.Name,
 			URL:     node.URL,
