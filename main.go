@@ -12,6 +12,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/events"
 	"ltools/internal/plugins"
 	"ltools/plugins/applauncher"
+	"ltools/plugins/bookmark"
 	"ltools/plugins/calculator"
 	"ltools/plugins/clipboard"
 	"ltools/plugins/datetime"
@@ -162,6 +163,12 @@ func init() {
 	application.RegisterEvent[string]("kanban:checklist:toggled")
 	application.RegisterEvent[string]("kanban:checklist:updated")
 	application.RegisterEvent[string]("kanban:checklist:removed")
+
+	// Register custom events for the bookmark plugin
+	application.RegisterEvent[string]("bookmark:sync-started")
+	application.RegisterEvent[string]("bookmark:sync-completed")
+	application.RegisterEvent[string]("bookmark:sync-error")
+	application.RegisterEvent[string]("bookmark:exported")
 }
 
 // main function serves as the application's entry point. It initializes the application, creates a window,
@@ -328,6 +335,16 @@ func main() {
 		log.Printf("[Main] Failed to set data dir for kanban plugin: %v", err)
 	}
 
+	// Create and register bookmark plugin
+	bookmarkPlugin := bookmark.NewBookmarkPlugin()
+	if err := pluginManager.Register(bookmarkPlugin); err != nil {
+		log.Fatal("Failed to register bookmark plugin:", err)
+	}
+	// Set data directory for bookmark plugin
+	if err := bookmarkPlugin.SetDataDir(dataDir); err != nil {
+		log.Printf("[Main] Failed to set data dir for bookmark plugin: %v", err)
+	}
+
 	// Start all enabled plugins - this calls ServiceStartup() on each enabled plugin
 	// This is crucial for plugins like clipboard that need to start background monitoring
 	if err := pluginManager.StartupAll(); err != nil {
@@ -384,6 +401,9 @@ func main() {
 	// Create kanban service to expose kanban functionality to frontend
 	kanbanService := kanban.NewKanbanService(kanbanPlugin, app, dataDir)
 
+	// Create bookmark service to expose bookmark functionality to frontend
+	bookmarkService := bookmark.NewBookmarkService(app, bookmarkPlugin)
+
 	// Create shortcut service to expose keyboard shortcut management to frontend
 	shortcutService, err := plugins.NewShortcutService(app, dataDir)
 	if err != nil {
@@ -411,6 +431,7 @@ func main() {
 	app.RegisterService(application.NewService(hostsService))
 	app.RegisterService(application.NewService(tunnelService))
 	app.RegisterService(application.NewService(kanbanService))
+	app.RegisterService(application.NewService(bookmarkService))
 	app.RegisterService(application.NewService(shortcutService))
 	app.RegisterService(application.NewService(searchWindowService))
 
