@@ -18,6 +18,7 @@ import (
 	"ltools/plugins/hosts"
 	"ltools/plugins/jsoneditor"
 	"ltools/plugins/kanban"
+	"ltools/plugins/markdown"
 	"ltools/plugins/password"
 	"ltools/plugins/processmanager"
 	"ltools/plugins/qrcode"
@@ -263,6 +264,12 @@ func main() {
 		log.Fatal("Failed to register jsoneditor plugin:", err)
 	}
 
+	// Create and register the markdown editor plugin
+	markdownPlugin := markdown.NewMarkdownPlugin()
+	if err := pluginManager.Register(markdownPlugin); err != nil {
+		log.Fatal("Failed to register markdown plugin:", err)
+	}
+
 	// Create and register the process manager plugin
 	processManagerPlugin := processmanager.NewProcessManagerPlugin()
 	if err := pluginManager.Register(processManagerPlugin); err != nil {
@@ -348,6 +355,9 @@ func main() {
 	// Create JSON editor service to expose JSON editor functionality to frontend
 	jsonEditorService := jsoneditor.NewJSONEditorService(jsonEditorPlugin, app)
 
+	// Create markdown editor service to expose markdown editor functionality to frontend
+	markdownService := markdown.NewMarkdownService(markdownPlugin, app)
+
 	// Create process manager service to expose process manager functionality to frontend
 	processManagerService := processmanager.NewProcessManagerService(processManagerPlugin, app)
 
@@ -393,6 +403,7 @@ func main() {
 	app.RegisterService(application.NewService(clipboardService))
 	app.RegisterService(application.NewService(sysInfoService))
 	app.RegisterService(application.NewService(jsonEditorService))
+	app.RegisterService(application.NewService(markdownService))
 	app.RegisterService(application.NewService(processManagerService))
 	app.RegisterService(application.NewService(screenshot2Service))
 	app.RegisterService(application.NewService(appLauncherService))

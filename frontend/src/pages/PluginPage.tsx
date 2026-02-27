@@ -17,6 +17,7 @@ import { HostsWidget } from '../components/HostsWidget'
 import { TunnelWidget } from '../components/TunnelWidget'
 import Screenshot2Widget from '../components/Screenshot2Widget'
 import { KanbanWidget } from '../components/kanban'
+import { MarkdownWidget } from '../components/MarkdownWidget'
 
 /**
  * 插件页面组件
@@ -25,7 +26,7 @@ import { KanbanWidget } from '../components/kanban'
 function PluginPage() {
   const { pluginId } = useParams<{ pluginId: string }>()
   const navigate = useNavigate()
-  const { plugins } = usePlugins()
+  const { plugins, loading } = usePlugins()
 
   const plugin = useMemo(() => {
     return plugins.find(p => p.id === pluginId)
@@ -33,6 +34,26 @@ function PluginPage() {
 
   const handleBack = () => {
     navigate('/')
+  }
+
+  // 加载中显示骨架屏
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="animate-pulse">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white/10 mb-6" />
+              <div className="h-8 bg-white/10 rounded w-48 mx-auto mb-2" />
+              <div className="h-4 bg-white/10 rounded w-64 mx-auto" />
+            </div>
+            <div className="glass-light rounded-xl p-8">
+              <div className="h-32 bg-white/10 rounded" />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (!plugin) {
@@ -302,6 +323,13 @@ function PluginContent({ pluginId, plugin, pluginIcon, onBack, isActive }: Plugi
         return (
           <div className="absolute inset-0 overflow-hidden">
             <KanbanWidget />
+          </div>
+        )
+
+      case 'markdown.builtin':
+        return (
+          <div className="absolute inset-0 flex flex-col overflow-hidden">
+            <MarkdownWidget />
           </div>
         )
 

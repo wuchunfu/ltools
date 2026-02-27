@@ -1,0 +1,735 @@
+import { useState, useCallback, useEffect, useRef } from 'react';
+import Editor, { Monaco } from '@monaco-editor/react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import rehypeHighlight from 'rehype-highlight';
+import rehypeRaw from 'rehype-raw';
+import { Icon } from './Icon';
+import { MarkdownService } from '../../bindings/ltools/plugins/markdown';
+import 'katex/dist/katex.min.css';
+import 'highlight.js/styles/github-dark.css';
+
+interface MarkdownStats {
+  characters: number;
+  words: number;
+  lines: number;
+  readTime: string;
+}
+
+const STORAGE_KEY_CONTENT = 'markdown-editor-draft-content';
+const STORAGE_KEY_FILENAME = 'markdown-editor-draft-filename';
+
+/**
+ * Markdown 编辑器主组件
+ */
+export function MarkdownWidget(): JSX.Element {
+  // 从 localStorage 恢复暂存内容
+  const [markdownText, setMarkdownText] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_CONTENT);
+    return saved || '# 欢迎使用 Markdown 编辑器\n\n开始编写你的文档...\n\n## 功能特性\n\n- **实时预览**：编辑时即时查看渲染效果\n- **GFM 支持**：表格、任务列表、删除线等\n- **数学公式**：支持 LaTeX 语法\n- **代码高亮**：多种语言语法高亮\n\n### 代码示例\n\n```javascript\nfunction hello() {\n  console.log("Hello, Markdown!");\n}\n```\n\n### 表格示例\n\n| 功能 | 快捷键 |\n|------|--------|\n| 加粗 | Cmd+B |\n| 斜体 | Cmd+I |\n\n### 数学公式\n\n行内公式：$E = mc^2$\n\n块级公式：\n\n$$\n\\sum_{i=1}^{n} x_i = x_1 + x_2 + \\cdots + x_n\n$$\n';
+  });
+  const [filename, setFilename] = useState(() => {
+    return localStorage.getItem(STORAGE_KEY_FILENAME) || 'untitled.md';
+  });
+  const [stats, setStats] = useState<MarkdownStats>({ characters: 0, words: 0, lines: 0, readTime: '' });
+  const [syncScroll, setSyncScroll] = useState(true);
+  const [showPreview, setShowPreview] = useState(true);
+  const [editorWidth, setEditorWidth] = useState(50); // 百分比
+  const syncScrollRef = useRef<boolean>(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
+
+  // 保持 ref 与 state 同步
+  useEffect(() => {
+    syncScrollRef.current = syncScroll;
+  }, [syncScroll]);
+
+  const editorRef = useRef<any>(null);
+  const monacoRef = useRef<Monaco | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  // 更新统计信息
+  useEffect(() => {
+    const updateStats = async () => {
+      try {
+        const result = await MarkdownService.GetStats(markdownText);
+        setStats(result);
+      } catch (err) {
+        console.error('Failed to get stats:', err);
+      }
+    };
+    updateStats();
+  }, [markdownText]);
+
+  // 暂存内容到 localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_CONTENT, markdownText);
+  }, [markdownText]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_FILENAME, filename);
+  }, [filename]);
+
+  // 拖拽分隔条处理 - 使用 requestAnimationFrame 优化性能
+  const rafRef = useRef<number | null>(null);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current || !containerRef.current) return;
+
+      // 取消之前的 RAF
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+
+      // 使用 RAF 批量更新
+      rafRef.current = requestAnimationFrame(() => {
+        if (!containerRef.current) return;
+
+        const container = containerRef.current;
+        const rect = container.getBoundingClientRect();
+        const containerWidth = rect.width;
+        const mouseX = e.clientX - rect.left;
+
+        // 计算新的宽度百分比
+        let newWidth = (mouseX / containerWidth) * 100;
+
+        // 限制最小宽度为 200px 对应的百分比
+        const minWidth = 200;
+        const minPercent = (minWidth / containerWidth) * 100;
+        const maxPercent = 100 - minPercent;
+
+        newWidth = Math.max(minPercent, Math.min(maxPercent, newWidth));
+        setEditorWidth(newWidth);
+      });
+    };
+
+    const handleGlobalMouseUp = () => {
+      if (isDragging.current) {
+        isDragging.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        if (rafRef.current) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = null;
+        }
+      }
+    };
+
+    document.addEventListener('mousemove', handleGlobalMouseMove);
+    document.addEventListener('mouseup', handleGlobalMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, []);
+
+  // 编辑器挂载时保存引用
+  const handleEditorDidMount = (editor: any, monaco: Monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+
+    // 注册编辑器级别快捷键（仅在编辑器聚焦时生效）
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyB, () => {
+      insertFormat('**', '**');
+    });
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyI, () => {
+      insertFormat('*', '*');
+    });
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyD, () => {
+      insertFormat('~~', '~~');
+    });
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => {
+      insertFormat('[', '](url)');
+    });
+
+    // 同步滚动：编辑器滚动时同步预览区域
+    editor.onDidScrollChange(() => {
+      if (!syncScrollRef.current || !previewRef.current) return;
+
+      const preview = previewRef.current;
+      const scrollTop = editor.getScrollTop();
+      const scrollHeight = editor.getScrollHeight();
+      const layoutHeight = editor.getLayoutInfo().height;
+
+      // 计算滚动比例
+      const maxEditorScroll = scrollHeight - layoutHeight;
+      const maxPreviewScroll = preview.scrollHeight - preview.clientHeight;
+
+      if (maxEditorScroll > 0 && maxPreviewScroll > 0) {
+        const scrollRatio = scrollTop / maxEditorScroll;
+        preview.scrollTop = scrollRatio * maxPreviewScroll;
+      }
+    });
+  };
+
+  // 插入格式化标记
+  const insertFormat = useCallback((prefix: string, suffix: string) => {
+    if (!editorRef.current) return;
+    const editor = editorRef.current;
+    const selection = editor.getSelection();
+    const selectedText = editor.getModel().getValueInRange(selection);
+    editor.executeEdits('', [{
+      range: selection,
+      text: `${prefix}${selectedText}${suffix}`,
+    }]);
+  }, []);
+
+  // 插入代码块
+  const insertCodeBlock = useCallback(() => {
+    if (!editorRef.current) return;
+    const editor = editorRef.current;
+    const selection = editor.getSelection();
+    const selectedText = editor.getModel().getValueInRange(selection);
+    editor.executeEdits('', [{
+      range: selection,
+      text: `\`\`\`javascript\n${selectedText || '// code here'}\n\`\`\``,
+    }]);
+  }, []);
+
+  // 插入表格
+  const insertTable = useCallback(() => {
+    if (!editorRef.current || !monacoRef.current) return;
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    const position = editor.getPosition();
+    editor.executeEdits('', [{
+      range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+      text: '\n| 列1 | 列2 | 列3 |\n|-----|-----|-----|\n| 内容 | 内容 | 内容 |\n',
+    }]);
+  }, []);
+
+  // 插入链接
+  const insertLink = useCallback(() => {
+    insertFormat('[', '](url)');
+  }, [insertFormat]);
+
+  // 插入图片
+  const insertImage = useCallback(() => {
+    if (!editorRef.current || !monacoRef.current) return;
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    const position = editor.getPosition();
+    editor.executeEdits('', [{
+      range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+      text: '![图片描述](image-url)',
+    }]);
+  }, []);
+
+  // 插入标题
+  const insertHeading = useCallback((level: number) => {
+    if (!editorRef.current || !monacoRef.current) return;
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    const position = editor.getPosition();
+    const lineContent = editor.getModel().getLineContent(position.lineNumber);
+    const prefix = '#'.repeat(level) + ' ';
+
+    // 移除现有标题标记
+    const cleanLine = lineContent.replace(/^#+\s*/, '');
+    editor.executeEdits('', [{
+      range: new monaco.Range(position.lineNumber, 1, position.lineNumber, lineContent.length + 1),
+      text: prefix + cleanLine,
+    }]);
+  }, []);
+
+  // 插入列表
+  const insertList = useCallback((type: 'ul' | 'ol' | 'task') => {
+    if (!editorRef.current || !monacoRef.current) return;
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    const position = editor.getPosition();
+    const prefix = type === 'ul' ? '- ' : type === 'ol' ? '1. ' : '- [ ] ';
+    editor.executeEdits('', [{
+      range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+      text: prefix,
+    }]);
+  }, []);
+
+  // 导入文件
+  const handleImport = useCallback(async () => {
+    try {
+      const result = await MarkdownService.ImportFile();
+      if (result && result.content) {
+        setMarkdownText(result.content);
+        setFilename(result.filename || 'untitled.md');
+      }
+    } catch (err) {
+      console.error('Failed to import file:', err);
+    }
+  }, []);
+
+  // 保存文件
+  const handleSave = useCallback(async () => {
+    try {
+      const path = await MarkdownService.SaveFile(markdownText, filename);
+      if (path) {
+        console.log('File saved to:', path);
+      }
+    } catch (err) {
+      console.error('Failed to save file:', err);
+    }
+  }, [markdownText, filename]);
+
+  // 导出 HTML
+  const handleExportHTML = useCallback(async () => {
+    try {
+      // 获取渲染后的 HTML
+      const previewEl = previewRef.current;
+      const renderedHTML = previewEl?.innerHTML || '';
+      const title = filename.replace('.md', '');
+      const path = await MarkdownService.ExportHTML(markdownText, renderedHTML, title);
+      if (path) {
+        console.log('HTML exported to:', path);
+      }
+    } catch (err) {
+      console.error('Failed to export HTML:', err);
+    }
+  }, [markdownText, filename]);
+
+  // 复制到剪贴板
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(markdownText);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  // 清空内容
+  const handleClear = () => {
+    setMarkdownText('');
+    setFilename('untitled.md');
+  };
+
+  return (
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* 工具栏 */}
+      <div className="flex-shrink-0 glass-heavy border-b border-white/10 p-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1">
+            {/* 标题按钮 */}
+            <div className="flex items-center gap-1 mr-2">
+              {[1, 2, 3].map((level) => (
+                <div key={level} className="relative group">
+                  <button
+                    className="px-2 py-1 rounded text-sm bg-white/5 text-white/70 hover:text-white hover:bg-white/10 transition-all clickable"
+                    onClick={() => insertHeading(level)}
+                  >
+                    H{level}
+                  </button>
+                  <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                    标题 {level}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="w-px h-5 bg-white/10 mx-1" />
+
+            {/* 格式按钮 */}
+            <div className="relative group">
+              <button
+                className="p-2 rounded bg-white/5 text-white/70 hover:text-white hover:bg-white/10 transition-all clickable"
+                onClick={() => insertFormat('**', '**')}
+              >
+                <Icon name="bold" size={16} />
+              </button>
+              <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                加粗
+              </span>
+            </div>
+            <div className="relative group">
+              <button
+                className="p-2 rounded bg-white/5 text-white/70 hover:text-white hover:bg-white/10 transition-all clickable"
+                onClick={() => insertFormat('*', '*')}
+              >
+                <Icon name="italic" size={16} />
+              </button>
+              <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                斜体
+              </span>
+            </div>
+            <div className="relative group">
+              <button
+                className="p-2 rounded bg-white/5 text-white/70 hover:text-white hover:bg-white/10 transition-all clickable"
+                onClick={() => insertFormat('~~', '~~')}
+              >
+                <Icon name="strikethrough" size={16} />
+              </button>
+              <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                删除线
+              </span>
+            </div>
+            <div className="relative group">
+              <button
+                className="p-2 rounded bg-white/5 text-white/70 hover:text-white hover:bg-white/10 transition-all clickable"
+                onClick={insertCodeBlock}
+              >
+                <Icon name="code" size={16} />
+              </button>
+              <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                代码块
+              </span>
+            </div>
+
+            <div className="w-px h-5 bg-white/10 mx-1" />
+
+            {/* 插入按钮 */}
+            <div className="relative group">
+              <button
+                className="p-2 rounded bg-white/5 text-white/70 hover:text-white hover:bg-white/10 transition-all clickable"
+                onClick={insertLink}
+              >
+                <Icon name="link" size={16} />
+              </button>
+              <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                链接
+              </span>
+            </div>
+            <div className="relative group">
+              <button
+                className="p-2 rounded bg-white/5 text-white/70 hover:text-white hover:bg-white/10 transition-all clickable"
+                onClick={insertImage}
+              >
+                <Icon name="image" size={16} />
+              </button>
+              <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                图片
+              </span>
+            </div>
+            <div className="relative group">
+              <button
+                className="p-2 rounded bg-white/5 text-white/70 hover:text-white hover:bg-white/10 transition-all clickable"
+                onClick={insertTable}
+              >
+                <Icon name="table" size={16} />
+              </button>
+              <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                表格
+              </span>
+            </div>
+
+            <div className="w-px h-5 bg-white/10 mx-1" />
+
+            {/* 列表按钮 */}
+            <div className="relative group">
+              <button
+                className="p-2 rounded bg-white/5 text-white/70 hover:text-white hover:bg-white/10 transition-all clickable"
+                onClick={() => insertList('ul')}
+              >
+                <Icon name="list" size={16} />
+              </button>
+              <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                无序列表
+              </span>
+            </div>
+            <div className="relative group">
+              <button
+                className="p-2 rounded bg-white/5 text-white/70 hover:text-white hover:bg-white/10 transition-all clickable"
+                onClick={() => insertList('ol')}
+              >
+                <Icon name="list-numbered" size={16} />
+              </button>
+              <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                有序列表
+              </span>
+            </div>
+            <div className="relative group">
+              <button
+                className="p-2 rounded bg-white/5 text-white/70 hover:text-white hover:bg-white/10 transition-all clickable"
+                onClick={() => insertList('task')}
+              >
+                <Icon name="checkbox" size={16} />
+              </button>
+              <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                任务列表
+              </span>
+            </div>
+          </div>
+
+          {/* 右侧操作按钮 */}
+          <div className="flex items-center gap-1">
+            <div className="relative group">
+              <button
+                className={`p-2 rounded transition-all clickable ${
+                  showPreview ? 'bg-[#7C3AED] text-white' : 'bg-white/5 text-white/70 hover:text-white hover:bg-white/10'
+                }`}
+                onClick={() => setShowPreview(!showPreview)}
+              >
+                <Icon name="view-columns" size={16} />
+              </button>
+              <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                {showPreview ? '隐藏预览' : '显示预览'}
+              </span>
+            </div>
+            <div className="relative group">
+              <button
+                className={`p-2 rounded transition-all clickable ${
+                  syncScroll ? 'bg-[#7C3AED] text-white' : 'bg-white/5 text-white/70 hover:text-white hover:bg-white/10'
+                }`}
+                onClick={() => setSyncScroll(!syncScroll)}
+              >
+                <Icon name="eye" size={16} />
+              </button>
+              <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                同步滚动
+              </span>
+            </div>
+            <div className="relative group">
+              <button
+                className="p-2 rounded bg-white/5 text-white/70 hover:text-white hover:bg-white/10 transition-all clickable"
+                onClick={handleImport}
+              >
+                <Icon name="upload" size={16} />
+              </button>
+              <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                打开文件
+              </span>
+            </div>
+            <div className="relative group">
+              <button
+                className="p-2 rounded bg-white/5 text-white/70 hover:text-white hover:bg-white/10 transition-all clickable"
+                onClick={handleSave}
+              >
+                <Icon name="download" size={16} />
+              </button>
+              <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                保存文件
+              </span>
+            </div>
+            <div className="relative group">
+              <button
+                className="p-2 rounded bg-white/5 text-white/70 hover:text-white hover:bg-white/10 transition-all clickable"
+                onClick={handleExportHTML}
+              >
+                <Icon name="document" size={16} />
+              </button>
+              <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-2 py-1 text-xs bg-black/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                导出 HTML
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 主内容区域 - 分屏布局 */}
+      <div
+        ref={containerRef}
+        className="flex-1 flex overflow-hidden"
+      >
+        {/* 左侧编辑器 */}
+        <div
+          className={`${showPreview ? '' : 'w-full'} flex flex-col overflow-hidden min-h-0`}
+          style={showPreview ? { width: `${editorWidth}%` } : undefined}
+        >
+          <div className="flex-shrink-0 px-3 py-2 bg-white/5 text-white/40 text-xs border-b border-white/10 flex items-center gap-2">
+            <Icon name="edit" size={12} />
+            编辑
+            <span className="ml-auto">{filename}</span>
+          </div>
+          <div className="flex-1 min-h-0">
+            <Editor
+              height="100%"
+              defaultLanguage="markdown"
+              value={markdownText}
+              onChange={(value) => setMarkdownText(value || '')}
+              onMount={handleEditorDidMount}
+              theme="vs-dark"
+              options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                lineNumbers: 'on',
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                wordWrap: 'on',
+                tabSize: 2,
+                padding: { top: 16 },
+              }}
+            />
+          </div>
+        </div>
+
+        {/* 拖拽分隔条 */}
+        {showPreview && (
+          <div
+            className="w-1 bg-white/10 hover:bg-[#7C3AED] cursor-col-resize flex-shrink-0 transition-colors flex items-center justify-center group"
+            onMouseDown={handleMouseDown}
+          >
+            <div className="w-0.5 h-8 bg-white/30 group-hover:bg-white rounded-full transition-colors" />
+          </div>
+        )}
+
+        {/* 右侧预览 */}
+        {showPreview && (
+          <div
+            className="flex flex-col bg-[#0D0F1A] overflow-hidden min-h-0"
+            style={{ width: `${100 - editorWidth}%` }}
+          >
+            <div className="flex-shrink-0 px-3 py-2 bg-white/5 text-white/40 text-xs border-b border-white/10 flex items-center gap-2">
+              <Icon name="eye" size={12} />
+              预览
+            </div>
+            <div
+              ref={previewRef}
+              className="flex-1 overflow-auto p-6 markdown-preview"
+            >
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex, rehypeHighlight, rehypeRaw]}
+                components={{
+                  // 自定义链接在新窗口打开
+                  a: ({ href, children }) => (
+                    <a href={href} target="_blank" rel="noopener noreferrer">
+                      {children}
+                    </a>
+                  ),
+                }}
+              >
+                {markdownText}
+              </ReactMarkdown>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 状态栏 */}
+      <div className="flex-shrink-0 glass-heavy border-t border-white/10 px-4 py-2 flex items-center justify-between text-xs text-white/40">
+        <div className="flex items-center gap-4">
+          <span>字符: {stats.characters}</span>
+          <span>字数: {stats.words}</span>
+          <span>行数: {stats.lines}</span>
+          <span>阅读: {stats.readTime}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            className="hover:text-white transition-colors clickable"
+            onClick={handleCopy}
+          >
+            复制
+          </button>
+          <span>|</span>
+          <button
+            className="hover:text-white transition-colors clickable"
+            onClick={handleClear}
+          >
+            清空
+          </button>
+        </div>
+      </div>
+
+      {/* Markdown 预览样式 */}
+      <style>{`
+        .markdown-preview h1 {
+          font-size: 2em;
+          font-weight: 700;
+          margin: 0.67em 0;
+          padding-bottom: 0.3em;
+          border-bottom: 2px solid #7C3AED;
+        }
+        .markdown-preview h2 {
+          font-size: 1.5em;
+          font-weight: 600;
+          margin: 0.83em 0;
+          padding-bottom: 0.3em;
+          border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .markdown-preview h3 {
+          font-size: 1.25em;
+          font-weight: 600;
+          margin: 1em 0;
+        }
+        .markdown-preview h4, .markdown-preview h5, .markdown-preview h6 {
+          font-weight: 600;
+          margin: 1em 0;
+        }
+        .markdown-preview p {
+          margin: 1em 0;
+          line-height: 1.7;
+        }
+        .markdown-preview a {
+          color: #7C3AED;
+          text-decoration: none;
+        }
+        .markdown-preview a:hover {
+          text-decoration: underline;
+        }
+        .markdown-preview code {
+          font-family: 'SF Mono', Monaco, 'Inconsolata', 'Fira Code', monospace;
+          background: rgba(124, 58, 237, 0.2);
+          padding: 0.2em 0.4em;
+          border-radius: 4px;
+          font-size: 0.9em;
+        }
+        .markdown-preview pre {
+          background: rgba(0, 0, 0, 0.3);
+          padding: 1em;
+          border-radius: 8px;
+          overflow-x: auto;
+          margin: 1em 0;
+        }
+        .markdown-preview pre code {
+          background: none;
+          padding: 0;
+        }
+        .markdown-preview blockquote {
+          border-left: 4px solid #7C3AED;
+          margin: 1em 0;
+          padding: 0.5em 1em;
+          background: rgba(124, 58, 237, 0.1);
+          border-radius: 0 8px 8px 0;
+        }
+        .markdown-preview table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 1em 0;
+        }
+        .markdown-preview th, .markdown-preview td {
+          border: 1px solid rgba(255,255,255,0.1);
+          padding: 0.5em 1em;
+          text-align: left;
+        }
+        .markdown-preview th {
+          background: rgba(124, 58, 237, 0.2);
+          font-weight: 600;
+        }
+        .markdown-preview ul, .markdown-preview ol {
+          margin: 1em 0;
+          padding-left: 2em;
+        }
+        .markdown-preview li {
+          margin: 0.25em 0;
+        }
+        .markdown-preview img {
+          max-width: 100%;
+          border-radius: 8px;
+          margin: 1em 0;
+        }
+        .markdown-preview hr {
+          border: none;
+          border-top: 1px solid rgba(255,255,255,0.1);
+          margin: 2em 0;
+        }
+        .markdown-preview input[type="checkbox"] {
+          margin-right: 0.5em;
+          accent-color: #7C3AED;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+export default MarkdownWidget;
