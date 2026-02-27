@@ -18,6 +18,7 @@ import { TunnelWidget } from '../components/TunnelWidget'
 import Screenshot2Widget from '../components/Screenshot2Widget'
 import { KanbanWidget } from '../components/kanban'
 import { MarkdownWidget } from '../components/MarkdownWidget'
+import { VaultWidget } from '../components/vault'
 
 /**
  * 插件页面组件
@@ -330,6 +331,13 @@ function PluginContent({ pluginId, plugin, pluginIcon, onBack, isActive }: Plugi
         return (
           <div className="absolute inset-0 flex flex-col overflow-hidden">
             <MarkdownWidget />
+          </div>
+        )
+
+      case 'vault.builtin':
+        return (
+          <div className="absolute inset-0 flex flex-col overflow-hidden">
+            <VaultWidget />
           </div>
         )
 

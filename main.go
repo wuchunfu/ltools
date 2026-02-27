@@ -25,6 +25,7 @@ import (
 	"ltools/plugins/screenshot2"
 	"ltools/plugins/sysinfo"
 	"ltools/plugins/tunnel"
+	"ltools/plugins/vault"
 )
 
 // Wails uses Go's `embed` package to embed the frontend files into the binary.
@@ -328,6 +329,12 @@ func main() {
 		log.Printf("[Main] Failed to set data dir for kanban plugin: %v", err)
 	}
 
+	// Create and register vault plugin (password manager)
+	vaultPlugin := vault.NewVaultPlugin(dataDir)
+	if err := pluginManager.Register(vaultPlugin); err != nil {
+		log.Fatal("Failed to register vault plugin:", err)
+	}
+
 	// Start all enabled plugins - this calls ServiceStartup() on each enabled plugin
 	// This is crucial for plugins like clipboard that need to start background monitoring
 	if err := pluginManager.StartupAll(); err != nil {
@@ -384,6 +391,9 @@ func main() {
 	// Create kanban service to expose kanban functionality to frontend
 	kanbanService := kanban.NewKanbanService(kanbanPlugin, app, dataDir)
 
+	// Create vault service to expose vault functionality to frontend
+	vaultService := vault.NewVaultService(vaultPlugin, app)
+
 	// Create shortcut service to expose keyboard shortcut management to frontend
 	shortcutService, err := plugins.NewShortcutService(app, dataDir)
 	if err != nil {
@@ -411,6 +421,7 @@ func main() {
 	app.RegisterService(application.NewService(hostsService))
 	app.RegisterService(application.NewService(tunnelService))
 	app.RegisterService(application.NewService(kanbanService))
+	app.RegisterService(application.NewService(vaultService))
 	app.RegisterService(application.NewService(shortcutService))
 	app.RegisterService(application.NewService(searchWindowService))
 
