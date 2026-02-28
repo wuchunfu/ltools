@@ -161,7 +161,7 @@ func (p *BookmarkPlugin) initParsers() {
 	p.parsers = []browser.BookmarkParser{
 		browser.NewChromeParser(),
 		browser.NewSafariParser(),
-		// Firefox 将在后续添加
+		browser.NewFirefoxParser(),
 	}
 }
 
