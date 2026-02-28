@@ -12,6 +12,10 @@ import type * as plugins$0 from "../../../../../ltools/internal/plugins/models.j
 declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
+            "bookmark:exported": string;
+            "bookmark:sync-completed": string;
+            "bookmark:sync-error": string;
+            "bookmark:sync-started": string;
             "calculator:error": string;
             "calculator:history": string;
             "calculator:result": string;
