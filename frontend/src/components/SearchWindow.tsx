@@ -63,7 +63,7 @@ function highlightMatch(text: string, query: string): JSX.Element {
  */
 export function SearchWindow() {
   // 窗口固定大小，使用固定的每页显示数量
-  const ITEMS_PER_PAGE = 12; // 4x3 网格布局
+  const ITEMS_PER_PAGE = 8; // 4x2 网格布局
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);

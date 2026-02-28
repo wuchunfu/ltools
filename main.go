@@ -17,6 +17,7 @@ import (
 	"ltools/plugins/clipboard"
 	"ltools/plugins/datetime"
 	"ltools/plugins/hosts"
+	"ltools/plugins/ipinfo"
 	"ltools/plugins/jsoneditor"
 	"ltools/plugins/kanban"
 	"ltools/plugins/markdown"
@@ -352,6 +353,12 @@ func main() {
 		log.Printf("[Main] Failed to set data dir for bookmark plugin: %v", err)
 	}
 
+	// Create and register ipinfo plugin
+	ipinfoPlugin := ipinfo.NewPlugin()
+	if err := pluginManager.Register(ipinfoPlugin); err != nil {
+		log.Fatal("Failed to register ipinfo plugin:", err)
+	}
+
 	// Start all enabled plugins - this calls ServiceStartup() on each enabled plugin
 	// This is crucial for plugins like clipboard that need to start background monitoring
 	if err := pluginManager.StartupAll(); err != nil {
@@ -414,6 +421,9 @@ func main() {
 	// Create bookmark service to expose bookmark functionality to frontend
 	bookmarkService := bookmark.NewBookmarkService(app, bookmarkPlugin)
 
+	// Create ipinfo service to expose ipinfo functionality to frontend
+	ipinfoService := ipinfo.NewService(ipinfoPlugin, app)
+
 	// Create shortcut service to expose keyboard shortcut management to frontend
 	shortcutService, err := plugins.NewShortcutService(app, dataDir)
 	if err != nil {
@@ -443,6 +453,7 @@ func main() {
 	app.RegisterService(application.NewService(kanbanService))
 	app.RegisterService(application.NewService(vaultService))
 	app.RegisterService(application.NewService(bookmarkService))
+	app.RegisterService(application.NewService(ipinfoService))
 	app.RegisterService(application.NewService(shortcutService))
 	app.RegisterService(application.NewService(searchWindowService))
 
