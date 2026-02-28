@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
 import { useBookmarks, CacheStatus } from '../hooks/useBookmarks';
 import { Icon } from '../components/Icon';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -13,29 +12,6 @@ export const BookmarkPage: React.FC = () => {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
-
-  const location = useLocation();
-  const isFirstRender = useRef(true);
-
-  // 清理搜索状态
-  const clearSearch = useCallback(() => {
-    setQuery('');
-    setResults([]);
-    setSelectedIndex(0);
-  }, []);
-
-  // 监听路由变化，离开书签页面时清理状态
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-
-    // 如果当前路由不是书签页面，清理状态
-    if (!location.pathname.includes('bookmark.builtin')) {
-      clearSearch();
-    }
-  }, [location.pathname, clearSearch]);
 
   // 加载缓存状态
   useEffect(() => {
