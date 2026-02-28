@@ -160,7 +160,8 @@ func (p *BookmarkPlugin) Sync() error {
 func (p *BookmarkPlugin) initParsers() {
 	p.parsers = []browser.BookmarkParser{
 		browser.NewChromeParser(),
-		// Safari 和 Firefox 将在 Phase 2 添加
+		browser.NewSafariParser(),
+		// Firefox 将在后续添加
 	}
 }
 
