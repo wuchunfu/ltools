@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"time"
 
 	"howett.net/plist"
@@ -13,6 +14,7 @@ import (
 // SafariParser Safari 书签解析器
 type SafariParser struct {
 	bookmarksPath string
+	lastError     error
 }
 
 // NewSafariParser 创建 Safari 解析器
@@ -23,6 +25,11 @@ func NewSafariParser() *SafariParser {
 // Name 返回浏览器名称
 func (p *SafariParser) Name() string {
 	return "Safari"
+}
+
+// GetLastError 获取最后的错误
+func (p *SafariParser) GetLastError() error {
+	return p.lastError
 }
 
 // GetBookmarksPath 获取书签文件路径
@@ -49,11 +56,51 @@ func (p *SafariParser) GetBookmarksPath() (string, error) {
 func (p *SafariParser) IsAvailable() bool {
 	path, err := p.GetBookmarksPath()
 	if err != nil {
+		p.lastError = err
 		return false
 	}
 
-	_, err = os.Stat(path)
-	return err == nil
+	// 检查文件是否存在
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsPermission(err) || isPermissionError(err) {
+			p.lastError = fmt.Errorf("需要「完全磁盘访问」权限才能读取 Safari 书签。请在系统偏好设置 > 隐私与安全性 > 完全磁盘访问 中添加此应用")
+		} else {
+			p.lastError = fmt.Errorf("无法访问 Safari 书签文件: %w", err)
+		}
+		return false
+	}
+
+	// 尝试读取文件以验证权限
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsPermission(err) || isPermissionError(err) {
+			p.lastError = fmt.Errorf("需要「完全磁盘访问」权限才能读取 Safari 书签。请在系统偏好设置 > 隐私与安全性 > 完全磁盘访问 中添加此应用")
+		} else {
+			p.lastError = fmt.Errorf("无法读取 Safari 书签文件: %w", err)
+		}
+		return false
+	}
+	file.Close()
+
+	// 文件存在且可读
+	_ = info
+	p.lastError = nil
+	return true
+}
+
+// isPermissionError 检查是否是权限错误
+func isPermissionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// EPERM (operation not permitted) 或 EACCES (permission denied)
+	if pathErr, ok := err.(*os.PathError); ok {
+		if errno, ok := pathErr.Err.(syscall.Errno); ok {
+			return errno == syscall.EPERM || errno == syscall.EACCES
+		}
+	}
+	return os.IsPermission(err)
 }
 
 // safariBookmarkItem Safari 书签 plist 结构
@@ -81,6 +128,10 @@ func (p *SafariParser) Parse() ([]Bookmark, error) {
 
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if os.IsPermission(err) || isPermissionError(err) {
+			p.lastError = fmt.Errorf("需要「完全磁盘访问」权限才能读取 Safari 书签。请在系统偏好设置 > 隐私与安全性 > 完全磁盘访问 中添加此应用")
+			return nil, p.lastError
+		}
 		return nil, fmt.Errorf("failed to read bookmarks file: %w", err)
 	}
 

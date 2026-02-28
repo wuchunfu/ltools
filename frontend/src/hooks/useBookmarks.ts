@@ -74,11 +74,35 @@ export function useBookmarks() {
     }
   }, []);
 
+  const exportHTML = useCallback(async (outputPath: string): Promise<boolean> => {
+    try {
+      await BookmarkService.ExportHTML(outputPath);
+      return true;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '导出 HTML 失败';
+      setError(errorMsg);
+      return false;
+    }
+  }, []);
+
+  const exportJSON = useCallback(async (outputPath: string): Promise<boolean> => {
+    try {
+      await BookmarkService.ExportJSON(outputPath);
+      return true;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '导出 JSON 失败';
+      setError(errorMsg);
+      return false;
+    }
+  }, []);
+
   return {
     search,
     sync,
     getCacheStatus,
     openURL,
+    exportHTML,
+    exportJSON,
     searching,
     syncing,
     error,

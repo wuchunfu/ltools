@@ -40,7 +40,7 @@ func NewBookmarkPlugin() *BookmarkPlugin {
 			plugins.PermissionFileSystem, // Read bookmark files
 		},
 		Keywords:   []string{"书签", "bookmark", "bm", "浏览器"},
-		ShowInMenu: plugins.BoolPtr(false), // Triggered via search window
+		ShowInMenu: plugins.BoolPtr(true), // Show in sidebar menu
 		HasPage:    plugins.BoolPtr(true),  // Has standalone management page
 	}
 
@@ -123,7 +123,16 @@ func (p *BookmarkPlugin) Sync() error {
 
 	for _, parser := range p.parsers {
 		if !parser.IsAvailable() {
-			p.app.Logger.Info(fmt.Sprintf("[Bookmark] %s not available, skipping", parser.Name()))
+			// 检查是否有权限错误等特殊错误
+			if safariParser, ok := parser.(*browser.SafariParser); ok {
+				if err := safariParser.GetLastError(); err != nil {
+					p.app.Logger.Info(fmt.Sprintf("[Bookmark] %s: %v", parser.Name(), err))
+				} else {
+					p.app.Logger.Info(fmt.Sprintf("[Bookmark] %s not available, skipping", parser.Name()))
+				}
+			} else {
+				p.app.Logger.Info(fmt.Sprintf("[Bookmark] %s not available, skipping", parser.Name()))
+			}
 			continue
 		}
 
