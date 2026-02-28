@@ -34,14 +34,6 @@ export const BookmarkPage: React.FC = () => {
     setCacheStatus(status);
   };
 
-  // 搜索框为空时立即清空结果
-  useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      setSelectedIndex(0);
-    }
-  }, [query]);
-
   // 搜索书签
   useEffect(() => {
     if (!query.trim()) {
@@ -89,10 +81,12 @@ export const BookmarkPage: React.FC = () => {
     }
   };
 
-  // 过滤结果 - 需要在键盘导航 useEffect 之前定义
-  const filteredResults = browserFilter === 'all'
-    ? results
-    : results.filter(r => r.bookmark.browser === browserFilter);
+  // 过滤结果 - 查询为空时直接返回空数组
+  const filteredResults = !query.trim() ? [] : (
+    browserFilter === 'all'
+      ? results
+      : results.filter(r => r.bookmark.browser === browserFilter)
+  );
 
   // 键盘导航
   useEffect(() => {
