@@ -1,27 +1,41 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useBookmarks, CacheStatus } from '../hooks/useBookmarks';
 import { Icon } from '../components/Icon';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
-export const BookmarkPage: React.FC = () => {
+// 浏览器图标映射
+const BROWSER_ICONS: Record<string, string> = {
+  chrome: '🌐',
+  safari: '🧭',
+  firefox: '🦊',
+};
+
+// 浏览器名称映射
+const BROWSER_NAMES: Record<string, string> = {
+  chrome: 'Chrome',
+  safari: 'Safari',
+  firefox: 'Firefox',
+};
+
+export const BookmarkPage = () => {
   const { search, sync, getCacheStatus, openURL, exportHTML, exportJSON, searching, syncing, error } = useBookmarks();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [cacheStatus, setCacheStatus] = useState<CacheStatus | null>(null);
-  const [browserFilter, setBrowserFilter] = useState<string>('all');
+  const [browserFilter, setBrowserFilter] = useState('all');
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const exportMenuRef = useRef<HTMLDivElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   // 加载缓存状态
   useEffect(() => {
-    loadCacheStatus();
-  }, []);
+    getCacheStatus().then(setCacheStatus);
+  }, [getCacheStatus]);
 
   // 点击外部关闭导出菜单
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
         setShowExportMenu(false);
       }
     };
@@ -29,108 +43,59 @@ export const BookmarkPage: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const loadCacheStatus = async () => {
-    const status = await getCacheStatus();
-    setCacheStatus(status);
-  };
-
-  // 搜索书签
+  // 搜索书签（debounce 200ms）
   useEffect(() => {
-    if (!query.trim()) {
-      return;
-    }
+    if (!query.trim()) return;
 
-    const doSearch = async () => {
+    const timer = setTimeout(async () => {
       const searchResults = await search(query);
       setResults(searchResults);
       setSelectedIndex(0);
-    };
+    }, 200);
 
-    const debounce = setTimeout(doSearch, 200);
-    return () => clearTimeout(debounce);
+    return () => clearTimeout(timer);
   }, [query, search]);
-
-  // 手动同步
-  const handleSync = async () => {
-    const success = await sync();
-    if (success) {
-      await loadCacheStatus();
-    }
-  };
-
-  // 打开书签
-  const handleOpenBookmark = async (url: string) => {
-    await openURL(url);
-  };
-
-  // 导出为 HTML
-  const handleExportHTML = async () => {
-    setShowExportMenu(false);
-    const path = await exportHTML();
-    if (path) {
-      console.log('Exported to:', path);
-    }
-  };
-
-  // 导出为 JSON
-  const handleExportJSON = async () => {
-    setShowExportMenu(false);
-    const path = await exportJSON();
-    if (path) {
-      console.log('Exported to:', path);
-    }
-  };
 
   // 过滤结果 - 查询为空时直接返回空数组
   const filteredResults = !query.trim() ? [] : (
-    browserFilter === 'all'
-      ? results
-      : results.filter(r => r.bookmark.browser === browserFilter)
+    browserFilter === 'all' ? results : results.filter(r => r.bookmark.browser === browserFilter)
   );
 
   // 键盘导航
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!query.trim() || filteredResults.length === 0) return;
+    if (!query.trim() || filteredResults.length === 0) return;
 
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelectedIndex(prev => Math.min(prev + 1, filteredResults.length - 1));
+        setSelectedIndex(i => Math.min(i + 1, filteredResults.length - 1));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSelectedIndex(prev => Math.max(prev - 1, 0));
+        setSelectedIndex(i => Math.max(i - 1, 0));
       } else if (e.key === 'Enter') {
         e.preventDefault();
         const selected = filteredResults[selectedIndex];
-        if (selected) {
-          handleOpenBookmark(selected.bookmark.url);
-        }
+        if (selected) openURL(selected.bookmark.url);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [query, filteredResults, selectedIndex]);
+  }, [query, filteredResults, selectedIndex, openURL]);
 
-  // 获取浏览器图标
-  const getBrowserIcon = (browser: string) => {
-    const icons: Record<string, string> = {
-      chrome: '🌐',
-      safari: '🧭',
-      firefox: '🦊',
-    };
-    return icons[browser] || '🔖';
-  };
+  // 同步书签
+  const handleSync = useCallback(async () => {
+    if (await sync()) {
+      getCacheStatus().then(setCacheStatus);
+    }
+  }, [sync, getCacheStatus]);
 
-  // 获取浏览器名称
-  const getBrowserName = (browser: string) => {
-    const names: Record<string, string> = {
-      chrome: 'Chrome',
-      safari: 'Safari',
-      firefox: 'Firefox',
-    };
-    return names[browser] || browser;
-  };
+  // 导出
+  const handleExport = useCallback(async (type: 'html' | 'json') => {
+    setShowExportMenu(false);
+    if (type === 'html') await exportHTML();
+    else await exportJSON();
+  }, [exportHTML, exportJSON]);
 
   return (
     <div className="h-full flex flex-col bg-[#0D0F1A]">
@@ -157,7 +122,7 @@ export const BookmarkPage: React.FC = () => {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="搜索书签..."
-                className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-white/40 focus:outline-none focus:border-[#7C3AED]/50 focus:bg-white/10 transition-all"
+                className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-white/40 focus:outline-none focus:border-[#7C3AED]/50 transition-all"
               />
             </div>
             <div className="flex-1 min-w-[130px] max-w-[160px]">
@@ -185,7 +150,7 @@ export const BookmarkPage: React.FC = () => {
               >
                 {syncing ? (
                   <>
-                    <span className="animate-spin inline-block">⏳</span>
+                    <span className="animate-spin">⏳</span>
                     同步中...
                   </>
                 ) : (
@@ -210,7 +175,7 @@ export const BookmarkPage: React.FC = () => {
                 {showExportMenu && (
                   <div className="absolute top-full left-0 mt-2 w-44 glass-light rounded-lg border border-white/10 overflow-hidden z-10">
                     <button
-                      onClick={handleExportHTML}
+                      onClick={() => handleExport('html')}
                       className="w-full px-3 py-2.5 text-left text-white hover:bg-white/10 transition-colors flex items-center gap-3 text-sm"
                     >
                       <span>📄</span>
@@ -220,7 +185,7 @@ export const BookmarkPage: React.FC = () => {
                       </div>
                     </button>
                     <button
-                      onClick={handleExportJSON}
+                      onClick={() => handleExport('json')}
                       className="w-full px-3 py-2.5 text-left text-white hover:bg-white/10 transition-colors flex items-center gap-3 text-sm border-t border-white/10"
                     >
                       <span>📋</span>
@@ -237,9 +202,7 @@ export const BookmarkPage: React.FC = () => {
             {/* 缓存状态 */}
             {cacheStatus && (
               <div className="flex items-center gap-4 text-sm text-white/50">
-                <span>
-                  共 <span className="text-white font-medium">{cacheStatus.total_count}</span> 个书签
-                </span>
+                <span>共 <span className="text-white font-medium">{cacheStatus.total_count}</span> 个书签</span>
                 <span className="hidden sm:inline">
                   同步于 <span className="text-white/70">{cacheStatus.last_sync || '从未'}</span>
                 </span>
@@ -261,8 +224,8 @@ export const BookmarkPage: React.FC = () => {
                   key={browser}
                   className="px-3 py-1.5 glass-light rounded-lg border border-white/5 flex items-center gap-2 text-sm"
                 >
-                  <span>{getBrowserIcon(browser)}</span>
-                  <span className="text-white/50">{getBrowserName(browser)}</span>
+                  <span>{BROWSER_ICONS[browser] || '🔖'}</span>
+                  <span className="text-white/50">{BROWSER_NAMES[browser] || browser}</span>
                   <span className="text-white font-medium">{count}</span>
                 </div>
               ))}
@@ -305,7 +268,7 @@ export const BookmarkPage: React.FC = () => {
               {filteredResults.map((result, index) => (
                 <div
                   key={`${result.bookmark.browser}-${result.bookmark.id}-${index}`}
-                  onClick={() => handleOpenBookmark(result.bookmark.url)}
+                  onClick={() => openURL(result.bookmark.url)}
                   className={`p-3 rounded-lg cursor-pointer transition-all ${
                     index === selectedIndex
                       ? 'bg-[#7C3AED]/20 border border-[#7C3AED]/30'
@@ -314,15 +277,11 @@ export const BookmarkPage: React.FC = () => {
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-xl flex-shrink-0">
-                      {getBrowserIcon(result.bookmark.browser)}
+                      {BROWSER_ICONS[result.bookmark.browser] || '🔖'}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-white font-medium truncate text-sm">
-                        {result.bookmark.title}
-                      </div>
-                      <div className="text-white/40 text-xs truncate">
-                        {result.bookmark.url}
-                      </div>
+                      <div className="text-white font-medium truncate text-sm">{result.bookmark.title}</div>
+                      <div className="text-white/40 text-xs truncate">{result.bookmark.url}</div>
                     </div>
                     {result.bookmark.folder && (
                       <span className="text-xs text-white/30 flex items-center gap-1 flex-shrink-0">
@@ -330,9 +289,7 @@ export const BookmarkPage: React.FC = () => {
                         {result.bookmark.folder}
                       </span>
                     )}
-                    <div className="flex-shrink-0 text-white/20">
-                      <Icon name="arrow-right" size={14} color="rgba(255,255,255,0.2)" />
-                    </div>
+                    <Icon name="arrow-right" size={14} color="rgba(255,255,255,0.2)" className="flex-shrink-0" />
                   </div>
                 </div>
               ))}
