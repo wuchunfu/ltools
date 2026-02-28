@@ -49,7 +49,7 @@ func NewBookmarkPlugin() *BookmarkPlugin {
 		config: &BookmarkConfig{
 			CacheExpiryDays: 7,
 			MaxResults:      50,
-			EnablePinyin:    false, // Phase 2 implementation
+			EnablePinyin:    true,
 			TriggerKeywords: []string{"书签", "bookmark", "bm"},
 		},
 	}

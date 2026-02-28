@@ -5,6 +5,7 @@ go 1.25
 require (
 	github.com/kbinani/screenshot v0.0.0-20250624051815-089614a94018
 	github.com/mattn/go-sqlite3 v1.14.34
+	github.com/mozillazg/go-pinyin v0.21.0
 	github.com/robotn/gohook v0.42.3
 	github.com/shirou/gopsutil/v4 v4.26.1
 	github.com/wailsapp/wails/v3 v3.0.0-alpha.63
