@@ -60,11 +60,15 @@ export const BookmarkPage: React.FC = () => {
 
   // 搜索书签
   useEffect(() => {
+    // 如果查询为空，立即清空结果
+    if (!query.trim()) {
+      setResults([]);
+      setSelectedIndex(0);
+      return;
+    }
+
+    // 有内容时使用 debounce
     const doSearch = async () => {
-      if (!query.trim()) {
-        setResults([]);
-        return;
-      }
       const searchResults = await search(query);
       setResults(searchResults);
       setSelectedIndex(0);
