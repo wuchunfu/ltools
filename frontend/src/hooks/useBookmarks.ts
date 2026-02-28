@@ -74,25 +74,25 @@ export function useBookmarks() {
     }
   }, []);
 
-  const exportHTML = useCallback(async (outputPath: string): Promise<boolean> => {
+  const exportHTML = useCallback(async (): Promise<string | null> => {
     try {
-      await BookmarkService.ExportHTML(outputPath);
-      return true;
+      const path = await BookmarkService.ExportHTML();
+      return path || null;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '导出 HTML 失败';
       setError(errorMsg);
-      return false;
+      return null;
     }
   }, []);
 
-  const exportJSON = useCallback(async (outputPath: string): Promise<boolean> => {
+  const exportJSON = useCallback(async (): Promise<string | null> => {
     try {
-      await BookmarkService.ExportJSON(outputPath);
-      return true;
+      const path = await BookmarkService.ExportJSON();
+      return path || null;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : '导出 JSON 失败';
       setError(errorMsg);
-      return false;
+      return null;
     }
   }, []);
 

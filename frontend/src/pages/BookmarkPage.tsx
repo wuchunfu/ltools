@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useBookmarks, CacheStatus } from '../hooks/useBookmarks';
 import { Icon } from '../components/Icon';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 export const BookmarkPage: React.FC = () => {
   const { search, sync, getCacheStatus, openURL, exportHTML, exportJSON, searching, syncing, error } = useBookmarks();
@@ -64,19 +65,19 @@ export const BookmarkPage: React.FC = () => {
 
   // 导出为 HTML
   const handleExportHTML = async () => {
-    const defaultPath = `~/Desktop/bookmarks_${new Date().toISOString().slice(0, 10)}.html`;
-    const success = await exportHTML(defaultPath);
-    if (success) {
-      setShowExportMenu(false);
+    setShowExportMenu(false);
+    const path = await exportHTML();
+    if (path) {
+      console.log('Exported to:', path);
     }
   };
 
   // 导出为 JSON
   const handleExportJSON = async () => {
-    const defaultPath = `~/Desktop/bookmarks_${new Date().toISOString().slice(0, 10)}.json`;
-    const success = await exportJSON(defaultPath);
-    if (success) {
-      setShowExportMenu(false);
+    setShowExportMenu(false);
+    const path = await exportJSON();
+    if (path) {
+      console.log('Exported to:', path);
     }
   };
 
@@ -158,16 +159,17 @@ export const BookmarkPage: React.FC = () => {
                 className="w-full pl-11 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:border-[#7C3AED]/50 focus:bg-white/10 transition-all"
               />
             </div>
-            <select
-              value={browserFilter}
-              onChange={(e) => setBrowserFilter(e.target.value)}
-              className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#7C3AED]/50 cursor-pointer min-w-[140px]"
-            >
-              <option value="all" className="bg-[#1a1a2e]">全部浏览器</option>
-              <option value="chrome" className="bg-[#1a1a2e]">Chrome</option>
-              <option value="safari" className="bg-[#1a1a2e]">Safari</option>
-              <option value="firefox" className="bg-[#1a1a2e]">Firefox</option>
-            </select>
+            <Select value={browserFilter} onValueChange={setBrowserFilter}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="选择浏览器" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部浏览器</SelectItem>
+                <SelectItem value="chrome">Chrome</SelectItem>
+                <SelectItem value="safari">Safari</SelectItem>
+                <SelectItem value="firefox">Firefox</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* 操作区 */}

@@ -1,6 +1,9 @@
 package bookmark
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -36,18 +39,75 @@ func (s *BookmarkService) GetCacheStatus() (map[string]interface{}, error) {
 // OpenURL 在浏览器中打开 URL
 func (s *BookmarkService) OpenURL(url string) error {
 	// 使用系统默认浏览器打开
-	// Wails v3 提供了 application.Browser.OpenURL 方法
 	return s.app.Browser.OpenURL(url)
 }
 
-// ExportHTML 导出为 HTML 格式
-func (s *BookmarkService) ExportHTML(outputPath string) error {
+// ExportHTML 导出为 HTML 格式（弹出保存对话框）
+func (s *BookmarkService) ExportHTML() (string, error) {
+	if s.app == nil {
+		return "", fmt.Errorf("application not initialized")
+	}
+
+	// 生成默认文件名
+	defaultFilename := fmt.Sprintf("bookmarks_%s.html", time.Now().Format("2006-01-02"))
+
+	// 弹出保存对话框
+	path, err := s.app.Dialog.SaveFile().
+		SetMessage("导出书签为 HTML").
+		SetFilename(defaultFilename).
+		AddFilter("HTML Files", "*.html").
+		AddFilter("All Files", "*.*").
+		PromptForSingleSelection()
+
+	if err != nil {
+		return "", fmt.Errorf("failed to show save dialog: %w", err)
+	}
+
+	if path == "" {
+		// 用户取消
+		return "", nil
+	}
+
+	// 执行导出
 	exporter := NewExporter(s.plugin)
-	return exporter.ExportHTML(outputPath)
+	if err := exporter.ExportHTML(path); err != nil {
+		return "", fmt.Errorf("failed to export: %w", err)
+	}
+
+	return path, nil
 }
 
-// ExportJSON 导出为 JSON 格式
-func (s *BookmarkService) ExportJSON(outputPath string) error {
+// ExportJSON 导出为 JSON 格式（弹出保存对话框）
+func (s *BookmarkService) ExportJSON() (string, error) {
+	if s.app == nil {
+		return "", fmt.Errorf("application not initialized")
+	}
+
+	// 生成默认文件名
+	defaultFilename := fmt.Sprintf("bookmarks_%s.json", time.Now().Format("2006-01-02"))
+
+	// 弹出保存对话框
+	path, err := s.app.Dialog.SaveFile().
+		SetMessage("导出书签为 JSON").
+		SetFilename(defaultFilename).
+		AddFilter("JSON Files", "*.json").
+		AddFilter("All Files", "*.*").
+		PromptForSingleSelection()
+
+	if err != nil {
+		return "", fmt.Errorf("failed to show save dialog: %w", err)
+	}
+
+	if path == "" {
+		// 用户取消
+		return "", nil
+	}
+
+	// 执行导出
 	exporter := NewExporter(s.plugin)
-	return exporter.ExportJSON(outputPath)
+	if err := exporter.ExportJSON(path); err != nil {
+		return "", fmt.Errorf("failed to export: %w", err)
+	}
+
+	return path, nil
 }
