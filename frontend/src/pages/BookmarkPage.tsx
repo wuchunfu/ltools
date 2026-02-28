@@ -34,33 +34,28 @@ export const BookmarkPage: React.FC = () => {
     setCacheStatus(status);
   };
 
+  // 搜索框为空时立即清空结果
+  useEffect(() => {
+    if (!query.trim()) {
+      setResults([]);
+      setSelectedIndex(0);
+    }
+  }, [query]);
+
   // 搜索书签
   useEffect(() => {
-    // 用于取消异步操作的标记
-    let cancelled = false;
+    if (!query.trim()) {
+      return;
+    }
 
     const doSearch = async () => {
-      if (!query.trim()) {
-        if (!cancelled) {
-          setResults([]);
-          setSelectedIndex(0);
-        }
-        return;
-      }
-
       const searchResults = await search(query);
-      // 只有在未取消且查询未变化时才更新结果
-      if (!cancelled) {
-        setResults(searchResults);
-        setSelectedIndex(0);
-      }
+      setResults(searchResults);
+      setSelectedIndex(0);
     };
 
-    const debounce = setTimeout(doSearch, query.trim() ? 200 : 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(debounce);
-    };
+    const debounce = setTimeout(doSearch, 200);
+    return () => clearTimeout(debounce);
   }, [query, search]);
 
   // 手动同步
