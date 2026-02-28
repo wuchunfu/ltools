@@ -40,12 +40,14 @@ func (s *BookmarkService) OpenURL(url string) error {
 	return s.app.Browser.OpenURL(url)
 }
 
-// ExportHTML 导出为 HTML 格式（Phase 2 实现）
+// ExportHTML 导出为 HTML 格式
 func (s *BookmarkService) ExportHTML(outputPath string) error {
-	return nil
+	exporter := NewExporter(s.plugin)
+	return exporter.ExportHTML(outputPath)
 }
 
-// ExportJSON 导出为 JSON 格式（Phase 2 实现）
+// ExportJSON 导出为 JSON 格式
 func (s *BookmarkService) ExportJSON(outputPath string) error {
-	return nil
+	exporter := NewExporter(s.plugin)
+	return exporter.ExportJSON(outputPath)
 }
