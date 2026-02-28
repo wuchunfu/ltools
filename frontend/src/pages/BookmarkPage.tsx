@@ -36,22 +36,31 @@ export const BookmarkPage: React.FC = () => {
 
   // 搜索书签
   useEffect(() => {
-    // 如果查询为空，立即清空结果
-    if (!query.trim()) {
-      setResults([]);
-      setSelectedIndex(0);
-      return;
-    }
+    // 用于取消异步操作的标记
+    let cancelled = false;
 
-    // 有内容时使用 debounce
     const doSearch = async () => {
+      if (!query.trim()) {
+        if (!cancelled) {
+          setResults([]);
+          setSelectedIndex(0);
+        }
+        return;
+      }
+
       const searchResults = await search(query);
-      setResults(searchResults);
-      setSelectedIndex(0);
+      // 只有在未取消且查询未变化时才更新结果
+      if (!cancelled) {
+        setResults(searchResults);
+        setSelectedIndex(0);
+      }
     };
 
-    const debounce = setTimeout(doSearch, 200);
-    return () => clearTimeout(debounce);
+    const debounce = setTimeout(doSearch, query.trim() ? 200 : 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(debounce);
+    };
   }, [query, search]);
 
   // 手动同步
