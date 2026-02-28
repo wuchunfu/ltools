@@ -304,7 +304,7 @@ export const BookmarkPage: React.FC = () => {
             <div className="space-y-2">
               {filteredResults.map((result, index) => (
                 <div
-                  key={result.bookmark.id}
+                  key={`${result.bookmark.browser}-${result.bookmark.id}-${index}`}
                   onClick={() => handleOpenBookmark(result.bookmark.url)}
                   className={`p-3 rounded-lg cursor-pointer transition-all ${
                     index === selectedIndex
