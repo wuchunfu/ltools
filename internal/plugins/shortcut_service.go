@@ -162,6 +162,22 @@ func (s *ShortcutService) SetMainWindow(window *application.WebviewWindow) {
 	// log.Printf("[ShortcutService] Main window reference set")
 }
 func (s *ShortcutService) SetShortcut(keyCombo, pluginID string) error {
+	// Check if this shortcut contains Alt/Option key
+	normalizedKeyCombo := normalizeKeyCombo(keyCombo)
+	parts := splitKeyCombo(normalizedKeyCombo)
+	hasAlt := false
+	for _, part := range parts {
+		if toLower(part) == "alt" || toLower(part) == "option" {
+			hasAlt = true
+			break
+		}
+	}
+
+	// If shortcut contains Alt, we need gohook (Wails KeyBinding doesn't support Alt)
+	if hasAlt && (!s.useGlobalHotkeys || !s.globalHotkeyManager.IsStarted()) {
+		return fmt.Errorf("shortcut %s contains Alt/Option key which requires global hotkey support (accessibility permissions required on macOS)", keyCombo)
+	}
+
 	// Check for conflicts first
 	if conflict, conflictingPluginID := s.manager.CheckConflict(keyCombo, pluginID); conflict {
 		return fmt.Errorf("shortcut %s is already bound to plugin %s", keyCombo, conflictingPluginID)
@@ -322,6 +338,14 @@ func (s *ShortcutService) registerShortcut(keyCombo, pluginID string) error {
 	// Wails v3 KeyBinding expects format like "Ctrl+S" or "Cmd+Shift+Z"
 	wailsKeyCombo := convertToWailsFormat(normalizedKeyCombo)
 
+	// If wailsKeyCombo is empty, it means this shortcut contains Alt/Option
+	// which Wails KeyBinding doesn't support. Skip Wails registration.
+	if wailsKeyCombo == "" {
+		s.app.Logger.Info(fmt.Sprintf("[ShortcutService] Shortcut %s contains Alt/Option, skipping Wails registration (gohook only)", normalizedKeyCombo))
+		s.registeredKeys[normalizedKeyCombo] = pluginID
+		return nil
+	}
+
 	// Create the key binding handler
 	handler := func(window application.Window) {
 		log.Printf("*** Shortcut TRIGGERED: %s -> %s ***", wailsKeyCombo, pluginID)
@@ -340,6 +364,8 @@ func (s *ShortcutService) registerShortcut(keyCombo, pluginID string) error {
 }
 
 // convertToWailsFormat converts a normalized key combo to Wails v3 format
+// Note: Wails KeyBinding API does NOT support Alt/Option key
+// If Alt is present, we should skip Wails registration and rely on gohook instead
 func convertToWailsFormat(keyCombo string) string {
 	parts := splitKeyCombo(keyCombo)
 	if len(parts) <= 1 {
@@ -349,6 +375,7 @@ func convertToWailsFormat(keyCombo string) string {
 	// Extract modifiers and main key
 	var modifiers []string
 	var mainKey string
+	hasAlt := false
 
 	for _, part := range parts {
 		switch toLower(part) {
@@ -359,11 +386,19 @@ func convertToWailsFormat(keyCombo string) string {
 		case "shift":
 			modifiers = append(modifiers, "Shift")
 		case "alt", "option":
-			modifiers = append(modifiers, "Alt")
+			// Wails KeyBinding doesn't support Alt/Option
+			// Mark that we have Alt and skip adding it to modifiers
+			hasAlt = true
 		default:
 			// This is the main key - capitalize it
 			mainKey = capitalizeKey(part)
 		}
+	}
+
+	// If Alt is present, return empty string to indicate this shortcut
+	// should only be registered with gohook, not with Wails KeyBinding
+	if hasAlt {
+		return ""
 	}
 
 	// Build the final key combo with all modifiers

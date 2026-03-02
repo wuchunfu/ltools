@@ -19,7 +19,7 @@ const SelectTrigger = React.forwardRef<
       rounded-lg bg-white/10 border border-white/20
       px-4 py-2 text-white text-sm
       placeholder:text-white/40
-      focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/50 focus:border-[#7C3AED]
+      focus:outline-none
       disabled:cursor-not-allowed disabled:opacity-50
       [&>span]:line-clamp-1
       ${className}

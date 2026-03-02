@@ -21,6 +21,9 @@ import { MarkdownWidget } from '../components/MarkdownWidget'
 import { VaultWidget } from '../components/vault'
 import { BookmarkPage } from '../pages/BookmarkPage'
 import IPInfoWidget from '../components/IPInfoWidget'
+import { StickyWidget } from '../components/StickyWidget'
+import { ImageBedWidget } from '../components/ImageBedWidget'
+import { LocalTranslateWidget } from '../components/LocalTranslateWidget'
 
 /**
  * 插件页面组件
@@ -354,6 +357,57 @@ function PluginContent({ pluginId, plugin, pluginIcon, onBack, isActive }: Plugi
         return (
           <div className="absolute inset-0 flex flex-col overflow-hidden">
             <IPInfoWidget />
+          </div>
+        )
+
+      case 'sticky.builtin':
+        return (
+          <div className="p-6">
+            <div className="max-w-6xl mx-auto">
+              <div className="text-center mb-8">
+                <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#A78BFA] mb-6">
+                  <Icon name="document" size={36} color="white" />
+                </div>
+                <h1 className="text-3xl font-bold mb-2">便利贴</h1>
+                <p className="text-white/50">创建和管理多个便利贴窗口</p>
+                <p className="text-sm text-white/30 mt-2">v1.0.0 · by LTools</p>
+              </div>
+              <StickyWidget />
+            </div>
+          </div>
+        )
+
+      case 'imagebed.builtin':
+        return (
+          <div className="p-6">
+            <div className="max-w-6xl mx-auto">
+              <div className="text-center mb-8">
+                <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#A78BFA] mb-6">
+                  <Icon name="photo" size={36} color="white" />
+                </div>
+                <h1 className="text-3xl font-bold mb-2">图床</h1>
+                <p className="text-white/50">使用 GitHub + jsDelivr 搭建个人图床</p>
+                <p className="text-sm text-white/30 mt-2">v1.0.0 · by LTools</p>
+              </div>
+              <ImageBedWidget />
+            </div>
+          </div>
+        )
+
+      case 'localtranslate.builtin':
+        return (
+          <div className="p-6">
+            <div className="max-w-4xl mx-auto">
+              <div className="text-center mb-8">
+                <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#A78BFA] mb-6">
+                  <Icon name="language" size={36} color="white" />
+                </div>
+                <h1 className="text-3xl font-bold mb-2">AI翻译</h1>
+                <p className="text-white/50">支持 Ollama、OpenAI、Anthropic、DeepSeek 等，提供本地和云端翻译服务</p>
+                <p className="text-sm text-white/30 mt-2">v1.0.0 · by LTools Team</p>
+              </div>
+              <LocalTranslateWidget />
+            </div>
           </div>
         )
 

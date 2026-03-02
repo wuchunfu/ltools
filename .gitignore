@@ -8,3 +8,8 @@ build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 *.log
 ltools
 .DS_Store
+.gitnexus
+.claude
+task_plan.md
+progress.md
+findings.md

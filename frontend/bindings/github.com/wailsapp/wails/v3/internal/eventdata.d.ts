@@ -47,6 +47,9 @@ declare module "@wailsio/runtime" {
             "hosts:scenario:deleted": string;
             "hosts:scenario:switched": string;
             "hosts:scenario:updated": string;
+            "imagebed:deleted": string;
+            "imagebed:error": string;
+            "imagebed:uploaded": string;
             "jsoneditor:error": string;
             "jsoneditor:formatted": string;
             "jsoneditor:validated": boolean;
@@ -70,6 +73,10 @@ declare module "@wailsio/runtime" {
             "kanban:label:created": string;
             "kanban:label:deleted": string;
             "kanban:label:updated": string;
+            "localtranslate:completed": string;
+            "localtranslate:error": string;
+            "localtranslate:show-window": string;
+            "localtranslate:started": string;
             "notification:show": string;
             "processmanager:error": string;
             "processmanager:killed": string;
@@ -92,6 +99,9 @@ declare module "@wailsio/runtime" {
             "search:results": (plugins$0.SearchResult | null)[];
             "shortcut:permission-required": string;
             "shortcut:triggered": string;
+            "sticky:created": string;
+            "sticky:deleted": string;
+            "sticky:updated": string;
             "sysinfo:cpu": string;
             "sysinfo:gc": string;
             "sysinfo:maxprocs": string;

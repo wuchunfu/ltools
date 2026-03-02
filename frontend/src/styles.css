@@ -248,7 +248,15 @@ h6 { font-size: 1rem; }
    Focus 状态（无障碍）
    ============================================ */
 
-*:focus-visible {
+/* 移除默认的紫色边框，仅在需要时使用 */
+*:focus {
+  outline: none;
+}
+
+/* 仅对特定交互元素显示 focus 样式 */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
   border-radius: 4px;

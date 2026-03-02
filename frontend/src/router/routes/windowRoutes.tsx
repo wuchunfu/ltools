@@ -6,6 +6,8 @@ import type { RouteConfig } from '../types'
 const SearchWindow = lazy(() => import('../../windows/SearchWindow'))
 const Screenshot2Overlay = lazy(() => import('../../windows/Screenshot2Overlay'))
 const PinWindowComponent = lazy(() => import('../../windows/PinWindow'))
+const StickyWindowComponent = lazy(() => import('../../windows/StickyWindow'))
+const LocalTranslateWindowComponent = lazy(() => import('../../windows/LocalTranslateWindow'))
 
 /**
  * PinWindow 包装器 - 从 URL 参数获取 windowId
@@ -14,6 +16,20 @@ function PinWindowWrapper() {
   const [searchParams] = useSearchParams()
   const windowId = parseInt(searchParams.get('id') || '0', 10)
   return <PinWindowComponent windowId={windowId} />
+}
+
+/**
+ * StickyWindow 包装器 - 组件内部从 URL 参数获取 id
+ */
+function StickyWindowWrapper() {
+  return <StickyWindowComponent />
+}
+
+/**
+ * LocalTranslateWindow 包装器
+ */
+function LocalTranslateWindowWrapper() {
+  return <LocalTranslateWindowComponent />
 }
 
 /**
@@ -67,11 +83,27 @@ export const windowRoutes: RouteConfig[] = [
       </LazyWindowWrapper>
     ),
   },
+  {
+    path: '/sticky-window',
+    element: (
+      <LazyWindowWrapper>
+        <StickyWindowWrapper />
+      </LazyWindowWrapper>
+    ),
+  },
+  {
+    path: '/localtranslate-window',
+    element: (
+      <LazyWindowWrapper>
+        <LocalTranslateWindowWrapper />
+      </LazyWindowWrapper>
+    ),
+  },
 ]
 
 /**
  * 判断当前路径是否为窗口路由
  */
 export function isWindowPath(path: string): boolean {
-  return path === '/search' || path === '/screenshot2-overlay' || path === '/pin-window'
+  return path === '/search' || path === '/screenshot2-overlay' || path === '/pin-window' || path === '/sticky-window' || path === '/localtranslate-window'
 }

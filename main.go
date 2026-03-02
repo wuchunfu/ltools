@@ -11,20 +11,24 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 	"ltools/internal/plugins"
+	"ltools/internal/sync"
 	"ltools/plugins/applauncher"
 	"ltools/plugins/bookmark"
 	"ltools/plugins/calculator"
 	"ltools/plugins/clipboard"
 	"ltools/plugins/datetime"
 	"ltools/plugins/hosts"
+	"ltools/plugins/imagebed"
 	"ltools/plugins/ipinfo"
 	"ltools/plugins/jsoneditor"
 	"ltools/plugins/kanban"
+	"ltools/plugins/localtranslate"
 	"ltools/plugins/markdown"
 	"ltools/plugins/password"
 	"ltools/plugins/processmanager"
 	"ltools/plugins/qrcode"
 	"ltools/plugins/screenshot2"
+	"ltools/plugins/sticky"
 	"ltools/plugins/sysinfo"
 	"ltools/plugins/tunnel"
 	"ltools/plugins/vault"
@@ -171,6 +175,22 @@ func init() {
 	application.RegisterEvent[string]("bookmark:sync-completed")
 	application.RegisterEvent[string]("bookmark:sync-error")
 	application.RegisterEvent[string]("bookmark:exported")
+
+	// Register custom events for the sticky plugin
+	application.RegisterEvent[string]("sticky:created")
+	application.RegisterEvent[string]("sticky:updated")
+	application.RegisterEvent[string]("sticky:deleted")
+
+	// Register custom events for the imagebed plugin
+	application.RegisterEvent[string]("imagebed:uploaded")
+	application.RegisterEvent[string]("imagebed:deleted")
+	application.RegisterEvent[string]("imagebed:error")
+
+	// Register custom events for the localtranslate plugin
+	application.RegisterEvent[string]("localtranslate:show-window")
+	application.RegisterEvent[string]("localtranslate:started")
+	application.RegisterEvent[string]("localtranslate:completed")
+	application.RegisterEvent[string]("localtranslate:error")
 }
 
 // main function serves as the application's entry point. It initializes the application, creates a window,
@@ -359,6 +379,32 @@ func main() {
 		log.Fatal("Failed to register ipinfo plugin:", err)
 	}
 
+	// Create and register sticky plugin
+	stickyPlugin := sticky.NewStickyPlugin()
+	if err := pluginManager.Register(stickyPlugin); err != nil {
+		log.Fatal("Failed to register sticky plugin:", err)
+	}
+	// Set data directory for sticky plugin
+	if err := stickyPlugin.SetDataDir(dataDir); err != nil {
+		log.Printf("[Main] Failed to set data dir for sticky plugin: %v", err)
+	}
+
+	// Create and register imagebed plugin
+	imagebedPlugin := imagebed.NewImageBedPlugin()
+	if err := pluginManager.Register(imagebedPlugin); err != nil {
+		log.Fatal("Failed to register imagebed plugin:", err)
+	}
+	// Set data directory for imagebed plugin
+	if err := imagebedPlugin.SetDataDir(dataDir); err != nil {
+		log.Printf("[Main] Failed to set data dir for imagebed plugin: %v", err)
+	}
+
+	// Create and register localtranslate plugin
+	localTranslatePlugin := localtranslate.NewLocalTranslatePlugin()
+	if err := pluginManager.Register(localTranslatePlugin); err != nil {
+		log.Fatal("Failed to register localtranslate plugin:", err)
+	}
+
 	// Start all enabled plugins - this calls ServiceStartup() on each enabled plugin
 	// This is crucial for plugins like clipboard that need to start background monitoring
 	if err := pluginManager.StartupAll(); err != nil {
@@ -424,10 +470,25 @@ func main() {
 	// Create ipinfo service to expose ipinfo functionality to frontend
 	ipinfoService := ipinfo.NewService(ipinfoPlugin, app)
 
+	// Create sticky service to expose sticky functionality to frontend
+	stickyService := sticky.NewStickyService(stickyPlugin, app, dataDir)
+
+	// Create imagebed service to expose imagebed functionality to frontend
+	imagebedService := imagebed.NewImageBedService(imagebedPlugin, app)
+
+	// Create localtranslate service to expose local translation functionality to frontend
+	localTranslateService := localtranslate.NewLocalTranslateService(localTranslatePlugin, app)
+
 	// Create shortcut service to expose keyboard shortcut management to frontend
 	shortcutService, err := plugins.NewShortcutService(app, dataDir)
 	if err != nil {
 		log.Fatal("Failed to create shortcut service:", err)
+	}
+
+	// Create sync service for Git-based data synchronization
+	syncService, err := sync.NewSyncService(app, dataDir)
+	if err != nil {
+		log.Fatal("Failed to create sync service:", err)
 	}
 
 	// Create search window service for global search functionality
@@ -454,8 +515,12 @@ func main() {
 	app.RegisterService(application.NewService(vaultService))
 	app.RegisterService(application.NewService(bookmarkService))
 	app.RegisterService(application.NewService(ipinfoService))
+	app.RegisterService(application.NewService(stickyService))
+	app.RegisterService(application.NewService(imagebedService))
+	app.RegisterService(application.NewService(localTranslateService))
 	app.RegisterService(application.NewService(shortcutService))
 	app.RegisterService(application.NewService(searchWindowService))
+	app.RegisterService(application.NewService(syncService))
 
 	// Create a new window with the necessary options.
 	// 'Title' is the title of the window.
@@ -507,6 +572,11 @@ func main() {
 		log.Printf("Failed to start screenshot2 window manager: %v", err)
 	}
 
+	// Start the localtranslate service
+	if err := localTranslateService.ServiceStartup(app); err != nil {
+		log.Printf("Failed to start localtranslate service: %v", err)
+	}
+
 	// Register default search window hotkey (Cmd+5 / Ctrl+5)
 	// Using Cmd+5 which might work better with gohook
 	// Note: This will override the sysinfo plugin's shortcut
@@ -545,6 +615,29 @@ func main() {
 		log.Printf("[Main] Failed to set screenshot2 hotkey %s: %v (may conflict with existing shortcut)", screenshotHotkey, err)
 	} else {
 		log.Printf("[Main] Default screenshot2 hotkey registered: %s", screenshotHotkey)
+	}
+
+	// Register default sticky note hotkey (Alt+T)
+	// Using Alt+T for sTicky note - simple and intuitive
+	stickyHotkey := "alt+t"
+
+	if err := shortcutService.SetShortcut(stickyHotkey, "sticky.builtin"); err != nil {
+		log.Printf("[Main] Failed to set sticky hotkey %s: %v (may conflict with existing shortcut)", stickyHotkey, err)
+	} else {
+		log.Printf("[Main] Default sticky hotkey registered: %s", stickyHotkey)
+	}
+
+	// Register default localtranslate hotkey (Cmd+Shift+T / Ctrl+Shift+T)
+	// Using T for Translate - intuitive and consistent across platforms
+	translateHotkey := "cmd+shift+t"
+	if runtime.GOOS != "darwin" {
+		translateHotkey = "ctrl+shift+t" // Windows/Linux
+	}
+
+	if err := shortcutService.SetShortcut(translateHotkey, "localtranslate.builtin"); err != nil {
+		log.Printf("[Main] Failed to set localtranslate hotkey %s: %v (may conflict with existing shortcut)", translateHotkey, err)
+	} else {
+		log.Printf("[Main] Default localtranslate hotkey registered: %s", translateHotkey)
 	}
 
 	// Run the application. This blocks until the application has been exited.

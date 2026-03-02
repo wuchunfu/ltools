@@ -86,6 +86,18 @@
 - **进程管理** - 查看和管理系统进程
 - **截图工具** - 截图编辑和管理
 - **密码生成器** - 生成安全的随机密码
+- **书签搜索** - 搜索 Chrome 浏览器书签
+- **Hosts 管理** - 编辑和管理系统 hosts 文件
+- **隧道管理** - SSH 隧道管理工具
+- **密码库** - 本地加密存储密码和敏感信息
+- **IP 信息** - 查询 IP 地址归属信息
+- **贴图工具** - 图片置顶显示
+- **AI翻译** - 基于本地模型的离线翻译
+- **Markdown** - Markdown 编辑和预览
+- **二维码** - 生成和识别二维码
+- **图床** - 图片上传和管理
+- **看板** - 任务看板管理
+- **应用启动器** - 快速启动应用程序
 
 ### 核心功能
 
@@ -116,7 +128,6 @@
 ```
 ltools/
 ├── main.go                 # 应用入口
-├── greetservice.go         # 示例服务
 ├── internal/
 │   └── plugins/           # 插件核心架构
 │       ├── plugin.go      # 插件接口定义
@@ -124,17 +135,35 @@ ltools/
 │       ├── shortcuts.go   # 快捷键管理
 │       └── search_window_service.go  # 全局搜索
 ├── plugins/               # 内置插件实现
-│   ├── datetime/
-│   ├── calculator/
-│   ├── clipboard/
-│   ├── sysinfo/
-│   ├── jsoneditor/
-│   ├── processmanager/
-│   └── screenshot/
+│   ├── datetime/         # 日期时间
+│   ├── calculator/       # 计算器
+│   ├── clipboard/        # 剪贴板管理
+│   ├── sysinfo/          # 系统信息
+│   ├── jsoneditor/       # JSON 编辑器
+│   ├── processmanager/   # 进程管理
+│   ├── screenshot2/      # 截图工具
+│   ├── password/         # 密码生成器
+│   ├── bookmark/         # 书签搜索
+│   ├── hosts/            # Hosts 管理
+│   ├── tunnel/           # 隧道管理
+│   ├── vault/            # 密码库
+│   ├── ipinfo/           # IP 信息
+│   ├── sticky/           # 贴图工具
+│   ├── localtranslate/   # AI翻译
+│   ├── markdown/         # Markdown 编辑器
+│   ├── qrcode/           # 二维码
+│   ├── imagebed/         # 图床
+│   ├── kanban/           # 看板
+│   └── applauncher/      # 应用启动器
 ├── frontend/              # 前端代码
 │   ├── src/
 │   │   ├── components/   # React 组件
-│   │   └── plugins/      # 插件加载器
+│   │   ├── hooks/        # 自定义 Hooks
+│   │   ├── pages/        # 页面组件
+│   │   ├── windows/      # 窗口组件
+│   │   ├── router/       # 路由配置
+│   │   ├── contexts/     # React Context
+│   │   └── utils/        # 工具函数
 │   ├── bindings/         # 自动生成的绑定
 │   └── dist/             # 构建输出
 └── build/                # 构建配置

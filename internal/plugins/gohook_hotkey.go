@@ -327,24 +327,46 @@ func (m *GlobalHotkeyManager) mapRawcodeToKey(rawcode uint16) string {
 		return "9"
 
 	// ========== Letter Keys ==========
-	// Standard QWERTY layout (verified partial mapping)
+	// Standard QWERTY layout
+	// Row 1: Q W E R T Y U I O P
+	// Row 2: A S D F G H J K L
+	// Row 3: Z X C V B N M
+
+	// Row 2 (home row) - A S D F G H
 	case 0x00: return "a"
 	case 0x01: return "s"
 	case 0x02: return "d"
 	case 0x03: return "f"
+	case 0x05: return "g"  // Note: G comes before H in rawcode sequence
 	case 0x04: return "h"
-	case 0x05: return "g"
+
+	// Row 3 (bottom row) - Z X C V B N M
 	case 0x06: return "z"
 	case 0x07: return "x"
 	case 0x08: return "c"
 	case 0x09: return "v"
+	case 0x0A: return "b"
+	case 0x11: return "n"  // N key - VERIFIED: User confirmed Alt+N triggers Alt+Y, meaning 0x11 is N, not Y
+	case 0x18: return "m"  // M key
+
+	// Row 1 (top row) - Q W E R T Y U I O P
 	case 0x0B: return "q"
 	case 0x0C: return "w"
 	case 0x0D: return "e"
 	case 0x0E: return "r"
-	case 0x0F: return "y"
-	case 0x10: return "t"
-	// TODO: Add remaining letter keys as needed
+	case 0x0F: return "t"  // T key
+	case 0x10: return "y"  // Y key - VERIFIED: This is Y, not N
+	case 0x12: return "u"  // U key
+	case 0x13: return "i"  // I key
+	case 0x14: return "o"  // O key
+	case 0x15: return "p"  // P key
+
+	// Row 2 (home row continued) - J K L
+	case 0x16: return "j"  // J key
+	case 0x17: return "k"  // K key
+	case 0x19: return "l"  // L key
+
+	// TODO: Add remaining keys if needed
 	}
 	return ""
 }
