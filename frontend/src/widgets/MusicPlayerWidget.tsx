@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import * as MusicPlayerService from '../../bindings/ltools/plugins/musicplayer/service';
+import * as MusicPlayerService from '../../bindings/ltools/plugins/musicplayer/servicelx';
 import { Song } from '../../bindings/ltools/plugins/musicplayer/models';
 import { Icon } from '../components/Icon';
 
@@ -359,7 +359,8 @@ export function MusicPlayerWidget() {
         });
 
         try {
-            const url = await MusicPlayerService.GetSongURL(song.id);
+            // 使用 GetSongURLWithMetadata 以确保能获取 URL
+            const url = await MusicPlayerService.GetSongURLWithMetadata(song, '320k');
 
             if (!url) {
                 console.error('🎵 No URL returned for song:', song.id);

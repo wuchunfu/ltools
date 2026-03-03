@@ -425,7 +425,8 @@ function PluginContent({ pluginId, plugin, pluginIcon, onBack, isActive }: Plugi
                 <button
                   onClick={async () => {
                     try {
-                      const MusicPlayerService = await import('../../bindings/ltools/plugins/musicplayer/service')
+                      // 使用 LX Music 服务（新版本）
+                      const MusicPlayerService = await import('../../bindings/ltools/plugins/musicplayer/servicelx')
                       await MusicPlayerService.ShowWindow()
                     } catch (error) {
                       console.error('Failed to open music player:', error)

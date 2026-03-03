@@ -220,6 +220,9 @@ func main() {
 				"allow-running-insecure-content", // 解除对从 HTTP 源提供内容的 MSP 的阻止
 				"autoplay-policy",                // 允许自动播放策略
 			},
+			AdditionalBrowserArgs: []string{
+				"--disable-web-security", // 禁用同源策略
+			},
 		},
 	})
 
@@ -496,12 +499,15 @@ func main() {
 	localTranslateService := localtranslate.NewLocalTranslateService(localTranslatePlugin, app)
 
 	// Create musicplayer service to expose music player functionality to frontend
-	musicPlayerService, err := musicplayer.NewService(musicPlayerPlugin, app)
+	musicPlayerServiceLX, err := musicplayer.NewServiceLX(musicPlayerPlugin, app)
 	if err != nil {
 		log.Fatal("Failed to create musicplayer service:", err)
 	}
-	// Set service reference in plugin
-	musicPlayerPlugin.SetService(musicPlayerService)
+	musicPlayerPlugin.SetService(musicPlayerServiceLX)
+	log.Printf("[INFO] Using LX Music service")
+
+	// Register service to app
+	app.RegisterService(application.NewService(musicPlayerServiceLX))
 
 	// Create shortcut service to expose keyboard shortcut management to frontend
 	shortcutService, err := plugins.NewShortcutService(app, dataDir)
@@ -542,7 +548,7 @@ func main() {
 	app.RegisterService(application.NewService(stickyService))
 	app.RegisterService(application.NewService(imagebedService))
 	app.RegisterService(application.NewService(localTranslateService))
-	app.RegisterService(application.NewService(musicPlayerService))
+	// musicPlayerService already registered above (line 518-523)
 	app.RegisterService(application.NewService(shortcutService))
 	app.RegisterService(application.NewService(searchWindowService))
 	app.RegisterService(application.NewService(syncService))

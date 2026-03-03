@@ -9,7 +9,7 @@ import (
 type MusicPlayerPlugin struct {
 	*plugins.BasePlugin
 	app            *application.App
-	service        *Service
+	serviceLX      *ServiceLX  // LX Music 服务
 	windowManager  *WindowManager
 }
 
@@ -20,13 +20,13 @@ func NewMusicPlayerPlugin() *MusicPlayerPlugin {
 		Name:        "随机音乐播放器",
 		Version:     "1.0.0",
 		Author:      "LTools",
-		Description: "基于 Meting API 的随机音乐播放器，支持网易云、腾讯、酷狗等多个平台",
+		Description: "基于 LX Music 的随机音乐播放器，支持网易云、腾讯、酷狗等多个平台",
 		Type:        plugins.PluginTypeBuiltIn,
 		State:       plugins.PluginStateInstalled,
 		Permissions: []plugins.Permission{
 			plugins.PermissionNetwork, // 需要网络权限访问音乐 API
 		},
-		Keywords:   []string{"音乐", "播放器", "随机", "Meting", "网易云", "QQ音乐", "酷狗"},
+		Keywords:   []string{"音乐", "播放器", "随机", "LX Music", "网易云", "QQ音乐", "酷狗"},
 		ShowInMenu: boolPtr(true),
 		HasPage:    boolPtr(true),
 	}
@@ -55,13 +55,13 @@ func (p *MusicPlayerPlugin) ServiceShutdown(app *application.App) error {
 }
 
 // GetService 获取服务实例
-func (p *MusicPlayerPlugin) GetService() *Service {
-	return p.service
+func (p *MusicPlayerPlugin) GetService() *ServiceLX {
+	return p.serviceLX
 }
 
 // SetService 设置服务实例（由 main.go 调用）
-func (p *MusicPlayerPlugin) SetService(service *Service) {
-	p.service = service
+func (p *MusicPlayerPlugin) SetService(service *ServiceLX) {
+	p.serviceLX = service
 }
 
 // boolPtr 返回 bool 的指针
