@@ -220,9 +220,9 @@ func (pm *ProxyManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 处理 OPTIONS 预检请求
 	if r.Method == "OPTIONS" {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Range, Content-Type, Accept")
-		w.Header().Set("Access-Control-Max-Age", "86400") // 24 小时
+		w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "*") // 允许所有请求头
+		w.Header().Set("Access-Control-Max-Age", "86400")   // 24 小时
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -420,11 +420,12 @@ func (pm *ProxyManager) serveResponse(w http.ResponseWriter, r *http.Request, re
 		}
 	}
 
-	// 添加 CORS 头
+	// 添加 CORS 头（宽松配置，支持通用场景）
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Range, Content-Type, Accept, Content-Length")
-	w.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Content-Type, Accept-Ranges")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "*")                                                                                         // 允许所有请求头
+	w.Header().Set("Access-Control-Expose-Headers", "*")                                                                                       // 暴露所有响应头
+	w.Header().Set("Access-Control-Max-Age", "86400")                                                                                          // 24小时缓存
 
 	// 写入响应状态码
 	w.WriteHeader(resp.StatusCode)
@@ -460,10 +461,10 @@ func (pm *ProxyManager) serveFromCache(w http.ResponseWriter, r *http.Request, c
 		}
 	}
 
-	// 添加 CORS 头
+	// 添加 CORS 头（宽松配置，支持通用场景）
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Range, Content-Type, Accept, Content-Length")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "*")
 	w.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Content-Type, Accept-Ranges")
 	w.Header().Set("X-Cache", "HIT")
 
