@@ -22,13 +22,14 @@ type ServiceLX struct {
 	lxClient       *LXClient
 	cacheManager   *CacheManager
 	sourceManager  *SourceManager
+	proxyHandler   ProxyHandler // 代理处理器
 
 	// 状态
 	initialized bool
 }
 
 // NewServiceLX 创建基于 LX Music 的服务实例
-func NewServiceLX(plugin *MusicPlayerPlugin, app *application.App) (*ServiceLX, error) {
+func NewServiceLX(plugin *MusicPlayerPlugin, app *application.App, proxyHandler ProxyHandler) (*ServiceLX, error) {
 	// 初始化配置管理器
 	configManager, err := NewConfigManager()
 	if err != nil {
@@ -66,6 +67,7 @@ func NewServiceLX(plugin *MusicPlayerPlugin, app *application.App) (*ServiceLX, 
 		processManager: processManager,
 		cacheManager:   cacheManager,
 		sourceManager:  sourceManager,
+		proxyHandler:   proxyHandler,
 		initialized:    false,
 	}
 
@@ -305,6 +307,14 @@ func (s *ServiceLX) GetSongURLWithMetadata(song *Song, quality string) (string, 
 	url := result.URLs[0].URL
 	log.Printf("[ServiceLX] Got music URL for song %s from source %s: %s", song.ID, result.URLs[0].Source, url)
 
+	// 注册到代理服务，返回本地代理 URL
+	if s.proxyHandler != nil {
+		s.proxyHandler.RegisterAudioURL(song.ID, url)
+		proxyURL := fmt.Sprintf("/proxy/audio/%s", song.ID)
+		log.Printf("[ServiceLX] Proxied audio URL: %s -> %s", url, proxyURL)
+		return proxyURL, nil
+	}
+
 	return url, nil
 }
 
@@ -313,6 +323,16 @@ func (s *ServiceLX) GetPicURL(picID string) (string, error) {
 	// picID 实际上是完整的图片 URL
 	if picID == "" {
 		return "", nil
+	}
+
+	// 注册到代理服务，返回本地代理 URL
+	if s.proxyHandler != nil {
+		// 使用 URL 的哈希值作为资源 ID
+		resourceID := GenerateCacheKey("pic", picID, "")
+		s.proxyHandler.RegisterImageURL(resourceID, picID)
+		proxyURL := fmt.Sprintf("/proxy/image/%s", resourceID)
+		log.Printf("[ServiceLX] Proxied image URL: %s -> %s", picID, proxyURL)
+		return proxyURL, nil
 	}
 
 	// 直接返回原始 URL（应用已禁用 web 安全）

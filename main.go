@@ -199,6 +199,9 @@ func init() {
 // registers plugins, and runs the application.
 func main() {
 
+	// Create proxy asset handler for music player
+	proxyHandler := NewProxyAssetHandler(application.AssetFileServerFS(assets))
+
 	// Create a new Wails application by providing the necessary options.
 	// Variables 'Name' and 'Description' are for application metadata.
 	// 'Assets' configures the asset server with the 'FS' variable pointing to the frontend files.
@@ -208,7 +211,7 @@ func main() {
 		Name:        "ltools",
 		Description: "A plugin-based desktop toolbox",
 		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
+			Handler: proxyHandler,
 		},
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: false, // 保持应用在窗口关闭后运行
@@ -501,7 +504,7 @@ func main() {
 	localTranslateService := localtranslate.NewLocalTranslateService(localTranslatePlugin, app)
 
 	// Create musicplayer service to expose music player functionality to frontend
-	musicPlayerServiceLX, err := musicplayer.NewServiceLX(musicPlayerPlugin, app)
+	musicPlayerServiceLX, err := musicplayer.NewServiceLX(musicPlayerPlugin, app, proxyHandler)
 	if err != nil {
 		log.Fatal("Failed to create musicplayer service:", err)
 	}
