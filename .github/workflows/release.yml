@@ -40,8 +40,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Install Windows dependencies
+        if: matrix.goos == 'windows'
+        run: |
+          choco install mingw -y
+          echo "MinGW-w64 installed successfully"
+        shell: C:\ProgramData\chocolatey\choco\lib\mingw\tools\install\bin\gcc.exe --version
+        echo "##vso.add-default-build-task --`GccInstallation` $ --version"
+        echo "::set-output name=mingw_gcc_path::$(cygpath "${{ steps['GccInstallation'] }")\n" echo "::add-path $:::$PATH
+          echo "##vso[task.add-to-path]$GITHUB_PATH"
+
+      - name: Install Windows dependencies
+        if: matrix.goos == 'windows'
+        run: |
+          choco install mingw -y
+          echo "MinGW-w64 installed successfully"
+          gcc --version
+        shell: powershell
+
+      - name: Setup Go        uses: actions/setup-go@v5
         with:
           go-version: '1.25'
           cache: true
@@ -52,6 +69,14 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: 'lx-music-service/package-lock.json'
+
+      - name: Install Windows dependencies
+        if: matrix.goos == 'windows'
+        run: |
+          # Install MinGW-w64 for CGO support
+          choco install mingw -y
+          # Add MinGW to PATH
+          echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH
 
       - name: Install Linux dependencies
         if: matrix.goos == 'linux'
