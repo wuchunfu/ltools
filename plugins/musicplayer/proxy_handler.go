@@ -6,10 +6,12 @@ type ProxyHandler interface {
 	// RegisterAudioURL 注册音频 URL
 	// resourceID: 资源唯一标识（通常是歌曲ID或哈希值）
 	// remoteURL: 远程音频 URL
-	RegisterAudioURL(resourceID, remoteURL string)
+	// 返回: 代理 URL（如 /proxy/audio/<hash>）
+	RegisterAudioURL(resourceID, remoteURL string) string
 
 	// RegisterImageURL 注册图片 URL
 	// resourceID: 资源唯一标识（通常是图片ID或哈希值）
 	// remoteURL: 远程图片 URL
-	RegisterImageURL(resourceID, remoteURL string)
+	// 返回: 代理 URL（如 /proxy/image/<hash>）
+	RegisterImageURL(resourceID, remoteURL string) string
 }

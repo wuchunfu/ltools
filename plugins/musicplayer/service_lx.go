@@ -309,8 +309,7 @@ func (s *ServiceLX) GetSongURLWithMetadata(song *Song, quality string) (string, 
 
 	// 注册到代理服务，返回本地代理 URL
 	if s.proxyHandler != nil {
-		s.proxyHandler.RegisterAudioURL(song.ID, url)
-		proxyURL := fmt.Sprintf("/proxy/audio/%s", song.ID)
+		proxyURL := s.proxyHandler.RegisterAudioURL(song.ID, url)
 		log.Printf("[ServiceLX] Proxied audio URL: %s -> %s", url, proxyURL)
 		return proxyURL, nil
 	}
@@ -329,8 +328,7 @@ func (s *ServiceLX) GetPicURL(picID string) (string, error) {
 	if s.proxyHandler != nil {
 		// 使用 URL 的哈希值作为资源 ID
 		resourceID := GenerateCacheKey("pic", picID, "")
-		s.proxyHandler.RegisterImageURL(resourceID, picID)
-		proxyURL := fmt.Sprintf("/proxy/image/%s", resourceID)
+		proxyURL := s.proxyHandler.RegisterImageURL(resourceID, picID)
 		log.Printf("[ServiceLX] Proxied image URL: %s -> %s", picID, proxyURL)
 		return proxyURL, nil
 	}

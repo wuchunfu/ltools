@@ -15,11 +15,13 @@ func NewMusicPlayerAdapter(manager *ProxyManager) *MusicPlayerAdapter {
 }
 
 // RegisterAudioURL 注册音频 URL（实现 musicplayer.ProxyHandler 接口）
-func (a *MusicPlayerAdapter) RegisterAudioURL(resourceID, remoteURL string) {
-	a.manager.RegisterAudio(a.pluginName, resourceID, remoteURL)
+// 返回代理 URL
+func (a *MusicPlayerAdapter) RegisterAudioURL(resourceID, remoteURL string) string {
+	return a.manager.RegisterAudio(a.pluginName, resourceID, remoteURL)
 }
 
 // RegisterImageURL 注册图片 URL（实现 musicplayer.ProxyHandler 接口）
-func (a *MusicPlayerAdapter) RegisterImageURL(resourceID, remoteURL string) {
-	a.manager.RegisterImage(a.pluginName, resourceID, remoteURL)
+// 返回代理 URL
+func (a *MusicPlayerAdapter) RegisterImageURL(resourceID, remoteURL string) string {
+	return a.manager.RegisterImage(a.pluginName, resourceID, remoteURL)
 }
