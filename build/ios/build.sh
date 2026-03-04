@@ -3,7 +3,7 @@ set -e
 
 # Build configuration
 APP_NAME="ltools"
-BUNDLE_ID="com.example.ltools"
+BUNDLE_ID="com.ltools.app"
 VERSION="0.1.0"
 BUILD_NUMBER="0.1.0"
 BUILD_DIR="build/ios"

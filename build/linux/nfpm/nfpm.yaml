@@ -10,8 +10,8 @@ version: "0.1.0"
 section: "default"
 priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
-description: "A ltools application"
-vendor: "My Company"
+description: "多功能开发工具集"
+vendor: "LTools"
 homepage: "https://wails.io"
 license: "MIT"
 release: "1"
@@ -23,9 +23,6 @@ contents:
     dst: "/usr/share/icons/hicolor/128x128/apps/ltools.png"
   - src: "./build/linux/ltools.desktop"
     dst: "/usr/share/applications/ltools.desktop"
-  # Include lx-music-service directory
-  - src: "./lx-music-service/"
-    dst: "/usr/local/share/ltools/lx-music-service"
 
 # Default dependencies for Debian 12/Ubuntu 22.04+ with WebKit 4.1
 depends:
