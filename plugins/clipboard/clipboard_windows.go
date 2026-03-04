@@ -5,7 +5,6 @@ package clipboard
 import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"ltools/internal/plugins"
-	clipboardinternal "ltools/internal/plugins/clipboard"
 )
 
 const (
@@ -24,8 +23,6 @@ type ClipboardItem struct {
 // ClipboardPlugin provides clipboard management functionality (Windows stub)
 type ClipboardPlugin struct {
 	*plugins.BasePlugin
-	app            *application.App
-	imageClipboard *clipboardinternal.ImageClipboard
 }
 
 // NewClipboardPlugin creates a new clipboard plugin (Windows stub)
@@ -46,8 +43,7 @@ func NewClipboardPlugin() *ClipboardPlugin {
 	}
 
 	return &ClipboardPlugin{
-		BasePlugin:    plugins.NewBasePlugin(metadata),
-		imageClipboard: clipboardinternal.NewImageClipboard(nil),
+		BasePlugin: plugins.NewBasePlugin(metadata),
 	}
 }
 
