@@ -1,6 +1,6 @@
 module ltools
 
-go 1.25
+go 1.23
 
 require (
 	github.com/kbinani/screenshot v0.0.0-20250624051815-089614a94018
