@@ -53,10 +53,11 @@ func DefaultProxyConfig() *ProxyConfig {
 	}
 }
 
-// CacheEntry 缓存条目
+	// CacheEntry 缓存条目
 type CacheEntry struct {
 	Data       []byte
 	Headers    http.Header
+	StatusCode int           // 保存原始状态码
 	ExpireTime time.Time
 }
 
@@ -333,7 +334,7 @@ func (pm *ProxyManager) handleProxy(w http.ResponseWriter, r *http.Request, path
 	defer resp.Body.Close()
 
 	// 处理响应
-	pm.serveResponse(w, r, resp, resourceID)
+	pm.serveResponse(w, r, resp, resourceID, resourceType)
 
 	// 更新延迟统计
 	latency := time.Since(startTime)
@@ -380,7 +381,7 @@ func (pm *ProxyManager) proxyRequest(r *http.Request, remoteURL string) (*http.R
 }
 
 // serveResponse 处理并缓存响应
-func (pm *ProxyManager) serveResponse(w http.ResponseWriter, r *http.Request, resp *http.Response, resourceID string) {
+func (pm *ProxyManager) serveResponse(w http.ResponseWriter, r *http.Request, resp *http.Response, resourceID string, resourceType ResourceType) {
 	// 检查状态码
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 		http.Error(w, fmt.Sprintf("Server returned status %d", resp.StatusCode), resp.StatusCode)
@@ -388,21 +389,28 @@ func (pm *ProxyManager) serveResponse(w http.ResponseWriter, r *http.Request, re
 	}
 
 	// 读取响应体（如果启用缓存）
+	// 注意：对于音频和视频，不缓存（因为 Range 请求复杂）
 	var bodyData []byte
 	var err error
 
-	if pm.config.EnableCache && resp.StatusCode == http.StatusOK {
+	shouldCache := pm.config.EnableCache &&
+		resp.StatusCode == http.StatusOK &&
+		resourceType != ResourceTypeAudio &&
+		resourceType != ResourceTypeVideo
+
+	if shouldCache {
 		bodyData, err = io.ReadAll(resp.Body)
 		if err != nil {
 			http.Error(w, "Failed to read response", http.StatusInternalServerError)
 			return
 		}
 
-		// 缓存响应
+		// 缓存响应（包括状态码）
 		pm.cacheMutex.Lock()
 		pm.cache[resourceID] = &CacheEntry{
 			Data:       bodyData,
 			Headers:    resp.Header,
+			StatusCode: resp.StatusCode,
 			ExpireTime: time.Now().Add(pm.config.CacheTTL),
 		}
 		pm.cacheMutex.Unlock()
@@ -465,10 +473,11 @@ func (pm *ProxyManager) serveFromCache(w http.ResponseWriter, r *http.Request, c
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "*")
-	w.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Content-Type, Accept-Ranges")
+	w.Header().Set("Access-Control-Expose-Headers", "*")
+	w.Header().Set("Access-Control-Max-Age", "86400")
 	w.Header().Set("X-Cache", "HIT")
 
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(cached.StatusCode)
 	w.Write(cached.Data)
 }
 
