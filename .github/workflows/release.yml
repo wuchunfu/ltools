@@ -47,19 +47,19 @@ jobs:
         with:
           path: |
             C:\ProgramData\chocolatey\lib\mingw
-            C:\ProgramData\chocolatey\lib\nsis
             C:\Program Files (x86)\NSIS
             C:\ProgramData\chocolatey\bin\gcc.exe
             C:\ProgramData\chocolatey\bin\g++.exe
             C:\ProgramData\chocolatey\bin\make.exe
-          key: ${{ runner.os }}-mingw-nsis-v2
+          key: ${{ runner.os }}-mingw-nsis-v3
           restore-keys: |
             ${{ runner.os }}-mingw-nsis-
 
       - name: Install Windows dependencies
         if: matrix.goos == 'windows' && steps.cache-windows-deps.outputs.cache-hit != 'true'
         run: |
-          choco install mingw nsis -y
+          choco install mingw -y
+          winget install --id NSIS.NSIS -e --accept-source-agreements --accept-package-agreements
           echo "MinGW-w64 and NSIS installed successfully"
           echo "C:\Program Files (x86)\NSIS" >> $env:GITHUB_PATH
           $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
