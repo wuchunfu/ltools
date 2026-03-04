@@ -151,7 +151,7 @@ func (c *ImageClipboard) GetImage() ([]byte, error) {
 				size := C.GlobalSize(hData)
 				if size > 0 {
 					// Copy the data
-					imgData := C.GoBytes(pData, C.int(size))
+					imgData := C.GoBytes(unsafe.Pointer(pData), C.int(size))
 					log.Printf("[Screenshot] ✓ Retrieved image from clipboard (%d bytes)", len(imgData))
 					return imgData, nil
 				}
