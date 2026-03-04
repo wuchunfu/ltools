@@ -30,6 +30,11 @@ jobs:
           sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b $HOME/.local/bin
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
+      - name: Install Wails v3
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+
       - name: Install music service dependencies
         run: |
           cd lx-music-service
@@ -79,6 +84,13 @@ jobs:
           Expand-Archive -Path "task.zip" -DestinationPath $installPath
           echo "$installPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Install Wails v3
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+          $goPath = go env GOPATH
+          $binPath = Join-Path $goPath "bin"
+          echo "$binPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Install music service dependencies
         run: |
           cd lx-music-service
@@ -127,6 +139,11 @@ jobs:
         run: |
           sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b $HOME/.local/bin
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install Wails v3
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
 
       - name: Install music service dependencies
         run: |
