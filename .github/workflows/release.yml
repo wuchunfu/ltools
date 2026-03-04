@@ -9,118 +9,25 @@ permissions:
   contents: write
 
 jobs:
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            ext: ''
+            archive: tar.gz
+          - os: macos-latest
+            goos: darwin
+            ext: '.app'
+            archive: tar.gz
+          - os: windows-latest
+            goos: windows
+            ext: '.exe'
+            archive: zip
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
+    runs-on: ${{ matrix.os }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Task
-        run: |
-          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b $HOME/.local/bin
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Install Wails v3
-        run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
-
-      - name: Install music service dependencies
-        run: |
-          cd lx-music-service
-          npm install --production
-          npm prune --production
-
-      - name: Build macOS
-        run: |
-          task darwin:package
-
-      - name: Package with music service
-        run: |
-          # 将 lx-music-service 复制到 .app 内部
-          mkdir -p bin/LTools.app/Contents/Resources
-          cp -r lx-music-service bin/LTools.app/Contents/Resources/
-
-          # 打包整个应用
-          tar czf ltools-${{ github.ref_name }}-darwin-arm64.tar.gz -C bin LTools.app
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: darwin-arm64
-          path: ltools-${{ github.ref_name }}-darwin-arm64.tar.gz
-
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install Task
-        run: |
-          $installPath = "$env:USERPROFILE\.local\bin"
-          New-Item -ItemType Directory -Force -Path $installPath
-          Invoke-WebRequest -Uri "https://github.com/go-task/task/releases/latest/download/task_windows_amd64.zip" -OutFile "task.zip"
-          Expand-Archive -Path "task.zip" -DestinationPath $installPath
-          echo "$installPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Install Wails v3
-        run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@latest
-          $goPath = go env GOPATH
-          $binPath = Join-Path $goPath "bin"
-          echo "$binPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Install music service dependencies
-        run: |
-          cd lx-music-service
-          npm install --production
-          npm prune --production
-
-      - name: Build Windows
-        run: |
-          task windows:build
-
-      - name: Package with music service
-        run: |
-          # 创建发布目录结构
-          mkdir release
-          cp bin\ltools.exe release\
-
-          # 复制音乐服务
-          Copy-Item -Path "lx-music-service" -Destination "release\lx-music-service" -Recurse
-
-          # 打包
-          Compress-Archive -Path release\* -DestinationPath ltools-${{ github.ref_name }}-windows-amd64.zip
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-amd64
-          path: ltools-${{ github.ref_name }}-windows-amd64.zip
-
-  build-linux:
-    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -136,6 +43,7 @@ jobs:
           node-version: '20'
 
       - name: Install Linux dependencies
+        if: matrix.goos == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -144,15 +52,11 @@ jobs:
             pkg-config \
             build-essential
 
-      - name: Install Task
-        run: |
-          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b $HOME/.local/bin
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
 
-      - name: Install Wails v3
-        run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
+      - name: Install Task
+        uses: arduino/setup-task@v2
 
       - name: Install music service dependencies
         run: |
@@ -160,30 +64,42 @@ jobs:
           npm install --production
           npm prune --production
 
-      - name: Build Linux
-        run: |
-          task linux:build
+      - name: Build application
+        run: wails3 build
 
-      - name: Package with music service
+      - name: Package with music service (macOS)
+        if: matrix.goos == 'darwin'
         run: |
-          # 创建发布目录结构
+          mkdir -p bin/LTools.app/Contents/Resources
+          cp -r lx-music-service bin/LTools.app/Contents/Resources/
+          tar czf ltools-${{ github.ref_name }}-${{ matrix.goos }}-arm64.tar.gz -C bin LTools.app
+
+      - name: Package with music service (Windows)
+        if: matrix.goos == 'windows'
+        run: |
+          mkdir release
+          cp bin\ltools.exe release\
+          Copy-Item -Path "lx-music-service" -Destination "release\lx-music-service" -Recurse
+          Compress-Archive -Path release\* -DestinationPath ltools-${{ github.ref_name }}-${{ matrix.goos }}-amd64.zip
+
+      - name: Package with music service (Linux)
+        if: matrix.goos == 'linux'
+        run: |
           mkdir -p release
           cp bin/ltools release/
-
-          # 复制音乐服务
           cp -r lx-music-service release/
-
-          # 打包
-          tar czf ltools-${{ github.ref_name }}-linux-amd64.tar.gz -C release .
+          tar czf ltools-${{ github.ref_name }}-${{ matrix.goos }}-amd64.tar.gz -C release .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-amd64
-          path: ltools-${{ github.ref_name }}-linux-amd64.tar.gz
+          name: app-${{ matrix.goos }}
+          path: |
+            *.tar.gz
+            *.zip
 
   create-release:
-    needs: [build-macos, build-windows, build-linux]
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -193,12 +109,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+          merge-multiple: false
 
       - name: Prepare release files
         run: |
           mkdir -p release
-          find artifacts -type f -name "*.tar.gz" -exec cp {} release/ \;
-          find artifacts -type f -name "*.zip" -exec cp {} release/ \;
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release/ \;
           ls -lh release/
 
       - name: Generate update manifest
