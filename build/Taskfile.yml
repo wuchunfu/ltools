@@ -21,6 +21,21 @@ tasks:
     cmds:
       - npm install
 
+  install:lx-music-service:deps:
+    summary: Install LX music service dependencies for production
+    dir: lx-music-service
+    sources:
+      - package.json
+      - package-lock.json
+    generates:
+      - node_modules
+    preconditions:
+      - sh: npm version
+        msg: "Looks like npm isn't installed. Npm is part of the Node installer: https://nodejs.org/en/download/"
+    cmds:
+      - npm install --production
+      - npm prune --production
+
   build:frontend:
     label: build:frontend (DEV={{.DEV}})
     summary: Build the frontend project
@@ -194,6 +209,19 @@ tasks:
     summary: Lists connected iOS devices (UDIDs)
     cmds:
       - xcrun xcdevice list
+
+  package:lx-music-service:
+    summary: Package LX music service for distribution
+    desc: |
+      Installs production dependencies and prepares lx-music-service for distribution.
+      This task should be run before building the final application package.
+    deps:
+      - task: install:lx-music-service:deps
+    cmds:
+      - |
+        echo "LX music service dependencies installed successfully"
+        echo "Service directory: lx-music-service/"
+        du -sh lx-music-service/node_modules || true
 
   ios:run:device:
     summary: Build, install, and launch on a physical iPhone using Apple tools (xcodebuild/devicectl)

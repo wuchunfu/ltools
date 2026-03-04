@@ -3,6 +3,7 @@ bin
 logs
 frontend/dist
 frontend/node_modules
+lx-music-service/node_modules
 build/linux/appimage/build
 build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 *.log

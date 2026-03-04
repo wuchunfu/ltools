@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -251,8 +252,20 @@ func (pm *ProxyManager) handleProxy(w http.ResponseWriter, r *http.Request, path
 	pm.stats.TotalRequests++
 	pm.stats.mutex.Unlock()
 
-	// 获取资源 ID
-	resourceID := strings.TrimPrefix(path, fmt.Sprintf("/proxy/%s/", resourceType))
+	// 获取资源 ID（需要 URL 解码以处理空格等特殊字符）
+	encodedResourceID := strings.TrimPrefix(path, fmt.Sprintf("/proxy/%s/", resourceType))
+	resourceID, err := url.PathUnescape(encodedResourceID)
+	if err != nil {
+		pm.stats.mutex.Lock()
+		pm.stats.FailedRequests++
+		pm.stats.mutex.Unlock()
+
+		http.Error(w, "Invalid resource ID encoding", http.StatusBadRequest)
+		if pm.config.EnableLogging {
+			log.Printf("[ProxyManager] Failed to decode resource ID: %s, error: %v", encodedResourceID, err)
+		}
+		return
+	}
 
 	pm.mutex.RLock()
 	remoteURL, ok := pm.urlMapping[resourceID]
@@ -307,34 +320,34 @@ func (pm *ProxyManager) handleProxy(w http.ResponseWriter, r *http.Request, path
 
 	// 代理请求（带重试）
 	var resp *http.Response
-	var err error
+	var proxyErr error
 
 	for retry := 0; retry <= pm.config.MaxRetries; retry++ {
-		resp, err = pm.proxyRequest(r, remoteURL)
-		if err == nil {
+		resp, proxyErr = pm.proxyRequest(r, remoteURL)
+		if proxyErr == nil {
 			break
 		}
 
 		if retry < pm.config.MaxRetries && pm.config.EnableLogging {
-			log.Printf("[ProxyManager] Retry %d/%d for %s: %v", retry+1, pm.config.MaxRetries, resourceID, err)
+			log.Printf("[ProxyManager] Retry %d/%d for %s: %v", retry+1, pm.config.MaxRetries, resourceID, proxyErr)
 		}
 	}
 
-	if err != nil {
+	if proxyErr != nil {
 		pm.stats.mutex.Lock()
 		pm.stats.FailedRequests++
 		pm.stats.mutex.Unlock()
 
 		http.Error(w, "Failed to fetch resource", http.StatusBadGateway)
 		if pm.config.EnableLogging {
-			log.Printf("[ProxyManager] Failed to proxy: %v", err)
+			log.Printf("[ProxyManager] Failed to proxy: %v", proxyErr)
 		}
 		return
 	}
 	defer resp.Body.Close()
 
 	// 处理响应
-	pm.serveResponse(w, r, resp, resourceID, resourceType)
+	pm.serveResponse(w, r, resp, resourceID, resourceType, remoteURL)
 
 	// 更新延迟统计
 	latency := time.Since(startTime)
@@ -381,7 +394,7 @@ func (pm *ProxyManager) proxyRequest(r *http.Request, remoteURL string) (*http.R
 }
 
 // serveResponse 处理并缓存响应
-func (pm *ProxyManager) serveResponse(w http.ResponseWriter, r *http.Request, resp *http.Response, resourceID string, resourceType ResourceType) {
+func (pm *ProxyManager) serveResponse(w http.ResponseWriter, r *http.Request, resp *http.Response, resourceID string, resourceType ResourceType, remoteURL string) {
 	// 检查状态码
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 		http.Error(w, fmt.Sprintf("Server returned status %d", resp.StatusCode), resp.StatusCode)
@@ -425,6 +438,61 @@ func (pm *ProxyManager) serveResponse(w http.ResponseWriter, r *http.Request, re
 	for key, values := range resp.Header {
 		for _, value := range values {
 			w.Header().Add(key, value)
+		}
+	}
+
+	// 🔧 关键修复：对于音频和视频，添加 Accept-Ranges 头
+	// 某些浏览器需要这个头来确认服务器支持 Range 请求
+	if resourceType == ResourceTypeAudio || resourceType == ResourceTypeVideo {
+		if w.Header().Get("Accept-Ranges") == "" {
+			w.Header().Set("Accept-Ranges", "bytes")
+		}
+
+		// 🔧 规范化音频 MIME 类型：Safari 可能不认识某些非标准 MIME 类型
+		contentType := w.Header().Get("Content-Type")
+		normalized := false
+
+		// 如果是通用二进制流，根据 URL 推断 MIME 类型
+		if contentType == "application/octet-stream" || contentType == "" {
+			// 从 URL 中提取文件扩展名
+			urlLower := strings.ToLower(remoteURL)
+			switch {
+			case strings.Contains(urlLower, ".flac"):
+				w.Header().Set("Content-Type", "audio/flac")
+				normalized = true
+			case strings.Contains(urlLower, ".mp3"):
+				w.Header().Set("Content-Type", "audio/mpeg")
+				normalized = true
+			case strings.Contains(urlLower, ".m4a"):
+				w.Header().Set("Content-Type", "audio/mp4")
+				normalized = true
+			case strings.Contains(urlLower, ".aac"):
+				w.Header().Set("Content-Type", "audio/aac")
+				normalized = true
+			case strings.Contains(urlLower, ".ogg"):
+				w.Header().Set("Content-Type", "audio/ogg")
+				normalized = true
+			case strings.Contains(urlLower, ".wav"):
+				w.Header().Set("Content-Type", "audio/wav")
+				normalized = true
+			}
+		} else {
+			// 规范化已知的非标准 MIME 类型
+			switch contentType {
+			case "audio/x-flac":
+				w.Header().Set("Content-Type", "audio/flac")
+				normalized = true
+			case "audio/x-ogg", "application/ogg":
+				w.Header().Set("Content-Type", "audio/ogg")
+				normalized = true
+			case "audio/x-vorbis":
+				w.Header().Set("Content-Type", "audio/vorbis")
+				normalized = true
+			}
+		}
+
+		if normalized && pm.config.EnableLogging {
+			log.Printf("[ProxyManager] Normalized MIME type: %s -> %s", contentType, w.Header().Get("Content-Type"))
 		}
 	}
 
@@ -570,11 +638,15 @@ func (pm *ProxyManager) ClearCache() {
 	}
 }
 
-// isBrokenPipeError 检查是否是 broken pipe 错误
+// isBrokenPipeError 检查是否是客户端断开连接的错误（正常的网络中断）
 func isBrokenPipeError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return strings.Contains(err.Error(), "broken pipe") ||
-		strings.Contains(err.Error(), "connection reset by peer")
+	errMsg := strings.ToLower(err.Error())
+	return strings.Contains(errMsg, "broken pipe") ||
+		strings.Contains(errMsg, "connection reset by peer") ||
+		strings.Contains(errMsg, "request has been stopped") || // 客户端主动取消请求
+		strings.Contains(errMsg, "client disconnected") ||
+		strings.Contains(errMsg, "context canceled")
 }

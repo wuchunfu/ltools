@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -116,9 +117,14 @@ func (s *ServiceLX) GetWindowManager() *WindowManager {
 }
 
 // Search 搜索歌曲（暴露给前端）
-func (s *ServiceLX) Search(keyword string) ([]Song, error) {
+func (s *ServiceLX) Search(keyword string, page int) ([]Song, error) {
 	if !s.initialized {
 		return nil, fmt.Errorf("service not initialized")
+	}
+
+	// 默认页码为 1
+	if page < 1 {
+		page = 1
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -130,22 +136,39 @@ func (s *ServiceLX) Search(keyword string) ([]Song, error) {
 		return nil, fmt.Errorf("no enabled sources")
 	}
 
-	// 使用第一个音源搜索
-	source := sources[0]
-	result, err := s.lxClient.Search(ctx, keyword, source, 1, 20)
-	if err != nil {
-		return nil, fmt.Errorf("search failed: %w", err)
+	// 尝试所有音源，直到有一个成功
+	var allSongs []Song
+	var lastErr error
+
+	for _, source := range sources {
+		result, err := s.lxClient.Search(ctx, keyword, source, page, 20)
+		if err != nil {
+			log.Printf("[ServiceLX] Search failed for source %s: %v", source, err)
+			lastErr = err
+			continue
+		}
+
+		// 转换为内部格式
+		for _, lxSong := range result.Songs {
+			song := ConvertLXSongToInternal(lxSong)
+			allSongs = append(allSongs, song)
+		}
+
+		// 如果当前音源返回了结果，直接返回（优先使用第一个成功的音源）
+		if len(allSongs) > 0 {
+			log.Printf("[ServiceLX] Search completed: keyword=%s, page=%d, source=%s, results=%d", keyword, page, source, len(allSongs))
+			return allSongs, nil
+		}
 	}
 
-	// 转换为内部格式
-	songs := make([]Song, 0, len(result.Songs))
-	for _, lxSong := range result.Songs {
-		song := ConvertLXSongToInternal(lxSong)
-		songs = append(songs, song)
+	// 所有音源都失败了
+	if lastErr != nil {
+		return nil, fmt.Errorf("all sources failed: %w", lastErr)
 	}
 
-	log.Printf("[ServiceLX] Search completed: keyword=%s, results=%d", keyword, len(songs))
-	return songs, nil
+	// 所有音源都没有返回结果
+	log.Printf("[ServiceLX] Search completed: keyword=%s, page=%d, results=0", keyword, page)
+	return allSongs, nil
 }
 
 // GetRandomSong 获取一首随机歌曲（暴露给前端）
@@ -198,6 +221,8 @@ func (s *ServiceLX) GetRandomSongs(count int) ([]Song, error) {
 	keywords := []string{
 		"Dj", "车载", "流行", "经典", "民谣", "摇滚", "电子",
 		"轻音乐", "纯音乐", "钢琴", "古风", "爵士", "蓝调",
+		"背景音乐", "放松", "抒情", "治愈", "安静", "浪漫",
+		"情歌", "热门", "新歌", "网络", "粤语", "英文",
 	}
 
 	result := make([]Song, 0, count)
@@ -207,11 +232,22 @@ func (s *ServiceLX) GetRandomSongs(count int) ([]Song, error) {
 
 	// 获取启用的音源
 	sources := s.sourceManager.GetEnabledSources()
-	keywordIndex := 0
 
-	for len(result) < count {
+	// 🔧 Go 1.20+ 不需要手动 Seed，直接使用随机函数
+	// 随机起始关键词
+	startIndex := rand.Intn(len(keywords))
+
+	// 随机页码（1-5页）
+	randomPage := rand.Intn(5) + 1
+
+	keywordIndex := startIndex
+	attempts := 0
+	maxAttempts := len(keywords) * 2 // 最多尝试关键词数量的2倍
+
+	for len(result) < count && attempts < maxAttempts {
 		keyword := keywords[keywordIndex%len(keywords)]
 		keywordIndex++
+		attempts++
 
 		// 尝试每个音源
 		for _, source := range sources {
@@ -219,8 +255,15 @@ func (s *ServiceLX) GetRandomSongs(count int) ([]Song, error) {
 				break
 			}
 
+			// 使用随机页码
+			page := randomPage
+			if attempts > 1 {
+				// 第二次及以后，随机切换页码
+				page = rand.Intn(5) + 1
+			}
+
 			searchCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			searchResult, err := s.lxClient.Search(searchCtx, keyword, source, 1, 10)
+			searchResult, err := s.lxClient.Search(searchCtx, keyword, source, page, 20)
 			cancel()
 
 			if err != nil {
@@ -228,8 +271,19 @@ func (s *ServiceLX) GetRandomSongs(count int) ([]Song, error) {
 				continue
 			}
 
+			// 检查搜索结果是否为空
+			if searchResult == nil || len(searchResult.Songs) == 0 {
+				continue
+			}
+
+			// 🔧 随机打乱搜索结果，避免每次都返回相同顺序
+			songs := searchResult.Songs
+			rand.Shuffle(len(songs), func(i, j int) {
+				songs[i], songs[j] = songs[j], songs[i]
+			})
+
 			// 添加歌曲
-			for _, lxSong := range searchResult.Songs {
+			for _, lxSong := range songs {
 				if foundIDs[lxSong.ID] {
 					continue
 				}
@@ -243,14 +297,11 @@ func (s *ServiceLX) GetRandomSongs(count int) ([]Song, error) {
 				}
 			}
 		}
-
-		// 避免无限循环
-		if keywordIndex > len(keywords)*3 {
-			break
-		}
 	}
 
-	log.Printf("[ServiceLX] Got random songs: %d/%d", len(result), count)
+	log.Printf("[ServiceLX] GetRandomSongs: requested=%d, found=%d, startKeyword=%s, page=%d",
+		count, len(result), keywords[startIndex], randomPage)
+
 	return result, nil
 }
 
@@ -303,9 +354,62 @@ func (s *ServiceLX) GetSongURLWithMetadata(song *Song, quality string) (string, 
 	cacheKey := GenerateCacheKey("music_url", song.ID, quality)
 	s.cacheManager.Set(cacheKey, result.URLs, 30*time.Minute)
 
-	// 返回第一个 URL
-	url := result.URLs[0].URL
-	log.Printf("[ServiceLX] Got music URL for song %s from source %s: %s", song.ID, result.URLs[0].Source, url)
+	// 🔧 关键修复：优先选择 FLAC 无损格式
+	// 格式优先级：FLAC > MP3/AAC/M4A > 其他（跳过不兼容格式）
+	var selectedURL *SongURLOption
+	var fallbackURL *SongURLOption
+
+	for i := range result.URLs {
+		url := &result.URLs[i]
+		urlLower := strings.ToLower(url.URL)
+
+		// 跳过不兼容的格式
+		// - OGG：Safari 不支持
+		// - WMA：浏览器普遍不支持
+		// - WAV：文件过大，不适合流式播放
+		// - APE：兼容性差
+		if strings.Contains(urlLower, ".ogg") ||
+			strings.Contains(urlLower, ".wma") ||
+			strings.Contains(urlLower, ".wav") ||
+			strings.Contains(urlLower, ".ape") {
+			log.Printf("[ServiceLX] Skipping incompatible format (%s): %s",
+				extractFormat(url.URL), url.URL)
+			continue
+		}
+
+		// 优先选择 FLAC（无损音质）
+		if strings.Contains(urlLower, ".flac") {
+			selectedURL = url
+			log.Printf("[ServiceLX] Selected FLAC format (lossless quality)")
+			break
+		}
+
+		// MP3/AAC/M4A 作为备选（兼容性好）
+		if (strings.Contains(urlLower, ".mp3") ||
+			strings.Contains(urlLower, ".aac") ||
+			strings.Contains(urlLower, ".m4a")) && fallbackURL == nil {
+			fallbackURL = url
+		}
+
+		// 如果还没选中，使用第一个兼容格式
+		if selectedURL == nil && fallbackURL == nil {
+			fallbackURL = url
+		}
+	}
+
+	// 选择最终 URL
+	if selectedURL == nil {
+		selectedURL = fallbackURL
+	}
+
+	if selectedURL == nil {
+		return "", fmt.Errorf("no compatible audio format available")
+	}
+
+	// 返回选中的 URL
+	url := selectedURL.URL
+	log.Printf("[ServiceLX] Got music URL for song %s from source %s (format: %s): %s",
+		song.ID, selectedURL.Source, extractFormat(url), url)
 
 	// 注册到代理服务，返回本地代理 URL
 	if s.proxyHandler != nil {
@@ -338,12 +442,11 @@ func (s *ServiceLX) GetPicURL(picID string) (string, error) {
 }
 
 // GetLyric 获取歌词（暴露给前端）
-func (s *ServiceLX) GetLyric(lyricID string) (string, error) {
+func (s *ServiceLX) GetLyric(song Song) (string, error) {
 	if !s.initialized {
 		return "", fmt.Errorf("service not initialized")
 	}
 
-	// lyricID 格式：songID
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -353,15 +456,19 @@ func (s *ServiceLX) GetLyric(lyricID string) (string, error) {
 		return "", fmt.Errorf("no enabled sources")
 	}
 
-	// 构造基本的 musicInfo
+	// 构造完整的 musicInfo（MusicFree 插件需要完整的歌曲信息）
 	musicInfo := map[string]interface{}{
-		"id": lyricID,
+		"id":     song.ID,
+		"name":   song.Name,
+		"singer": strings.Join(song.Artist, ","),
+		"album":  song.Album,
+		"source": song.Source,
 	}
 
 	lyricResult, err := s.lxClient.GetLyric(ctx, sources[0], musicInfo)
 	if err != nil {
-		log.Printf("[ServiceLX] Failed to get lyric: %v", err)
-		return "", nil // 返回空字符串而不是错误，避免阻塞播放
+		// 静默处理歌词获取失败（某些歌曲没有歌词是正常的）
+		return "", nil
 	}
 
 	// 返回主歌词
@@ -474,4 +581,24 @@ func ensureHTTPS(url string) string {
 		return strings.Replace(url, "http://", "https://", 1)
 	}
 	return url
+}
+
+// extractFormat 从 URL 中提取音频格式
+func extractFormat(url string) string {
+	urlLower := strings.ToLower(url)
+
+	// 常见音频格式
+	formats := []string{
+		".flac", ".mp3", ".aac", ".m4a",
+		".ogg", ".opus", ".wav", ".ape",
+		".wma", ".alac",
+	}
+
+	for _, ext := range formats {
+		if strings.Contains(urlLower, ext) {
+			return strings.TrimPrefix(ext, ".")
+		}
+	}
+
+	return "unknown"
 }

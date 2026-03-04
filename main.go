@@ -12,6 +12,7 @@ import (
 	"ltools/internal/plugins"
 	"ltools/internal/proxy"
 	"ltools/internal/sync"
+	"ltools/internal/update"
 	"ltools/plugins/applauncher"
 	"ltools/plugins/bookmark"
 	"ltools/plugins/calculator"
@@ -544,6 +545,14 @@ func main() {
 	// Set app launcher service for app search integration
 	searchWindowService.SetAppLauncherService(appLauncherService)
 
+	// Create update service
+	updateService := update.NewService(&update.ServiceConfig{
+		CurrentVersion: "0.1.0", // TODO: 从 build/config.yml 读取
+		UpdateURL:      "https://raw.githubusercontent.com/lian-yang/ltools/main/",
+		DataDir:        dataDir,
+		Enabled:        true, // TODO: 从用户配置读取
+	})
+
 	// Register services
 	app.RegisterService(application.NewService(pluginService))
 	app.RegisterService(application.NewService(datetimeService))
@@ -570,6 +579,7 @@ func main() {
 	app.RegisterService(application.NewService(shortcutService))
 	app.RegisterService(application.NewService(searchWindowService))
 	app.RegisterService(application.NewService(syncService))
+	app.RegisterService(application.NewService(updateService))
 
 	// Create a new window with the necessary options.
 	// 'Title' is the title of the window.
@@ -695,6 +705,23 @@ func main() {
 	} else {
 		log.Printf("[Main] Default localtranslate hotkey registered: %s", translateHotkey)
 	}
+
+	// Check for updates in background (delayed 10 seconds to not block startup)
+	go func() {
+		time.Sleep(10 * time.Second)
+		if updateService.IsEnabled() {
+			info, err := updateService.CheckForUpdate()
+			if err != nil {
+				log.Printf("[Main] Failed to check for updates: %v", err)
+				return
+			}
+			if info != nil {
+				log.Printf("[Main] Update available: %s", info.Version)
+				// Emit event to frontend
+				app.Event.Emit("update:available", info)
+			}
+		}
+	}()
 
 	// Run the application. This blocks until the application has been exited.
 	err = app.Run()

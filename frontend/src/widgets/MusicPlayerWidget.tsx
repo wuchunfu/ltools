@@ -24,9 +24,65 @@ export function MusicPlayerWidget() {
     const [hasInitialized, setHasInitialized] = useState(false); // 是否已初始化
     const [currentLyricIndex, setCurrentLyricIndex] = useState(-1); // 当前行索引
 
+    // 搜索分页状态
+    const [searchPage, setSearchPage] = useState(1); // 当前搜索页码
+    const [hasMoreResults, setHasMoreResults] = useState(true); // 是否还有更多结果
+    const [isLoadingMore, setIsLoadingMore] = useState(false); // 是否正在加载更多
+
+    const lastProgressRef = useRef<number>(0); // 上一次的播放进度（用于检测跳跃）
+    const latestProgressRef = useRef<number>(0); // 最新的播放进度
+    const latestParsedLyricsRef = useRef<Array<{ time: number; text: string }>>([]); // 最新的解析歌词
+
     const audioRef = useRef<HTMLAudioElement>(null);
     const lyricsContainerRef = useRef<HTMLDivElement>(null);
     const lastScrollTimeRef = useRef<number>(0); // 上次滚动时间
+    const searchResultsRef = useRef<HTMLDivElement>(null); // 搜索结果容器引用
+
+    // 更新最新的进度和歌词（不触发重渲染）
+    useEffect(() => {
+        latestProgressRef.current = progress;
+    }, [progress]);
+
+    useEffect(() => {
+        latestParsedLyricsRef.current = parsedLyrics;
+    }, [parsedLyrics]);
+
+    // 禁止歌词区域滚动
+    useEffect(() => {
+        const container = lyricsContainerRef.current;
+        if (!container) return;
+
+        const preventScroll = (e: WheelEvent | TouchEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+        };
+
+        // 添加事件监听器（passive: false 允许 preventDefault 生效）
+        container.addEventListener('wheel', preventScroll, { passive: false });
+        container.addEventListener('touchmove', preventScroll, { passive: false });
+
+        return () => {
+            container.removeEventListener('wheel', preventScroll);
+            container.removeEventListener('touchmove', preventScroll);
+        };
+    }, [showLyrics]);
+
+    // 搜索结果滚动监听 - 自动加载更多
+    useEffect(() => {
+        const container = searchResultsRef.current;
+        if (!container || !showSearch) return;
+
+        const handleScroll = () => {
+            const { scrollTop, scrollHeight, clientHeight } = container;
+            // 距离底部100px时触发加载
+            if (scrollHeight - scrollTop - clientHeight < 100) {
+                loadMoreSearchResults();
+            }
+        };
+
+        container.addEventListener('scroll', handleScroll);
+        return () => container.removeEventListener('scroll', handleScroll);
+    }, [showSearch, searchKeyword, searchPage, hasMoreResults, isLoadingMore]);
 
     // 更新进度
     useEffect(() => {
@@ -55,16 +111,11 @@ export function MusicPlayerWidget() {
         if (!audio) return;
 
         const handleError = (e: Event) => {
-            const target = e.target as HTMLAudioElement;
-            const error = target.error;
-            if (error) {
-                console.error('🎵 Audio Error:', error.message);
-            }
+            // 静默处理音频错误
         };
 
         // 自动播放下一曲
         const handleEnded = () => {
-            console.log('🎵 Song ended, playing next...');
             playNext();
         };
 
@@ -95,24 +146,33 @@ export function MusicPlayerWidget() {
         const currentTime = progress;
         let newLineIndex = 0;
 
+        // 修复：找到"下一个时间点大于当前时间"的前一行
+        // 这样可以确保显示的是"正在唱"的歌词，而不是"将要唱"的歌词
         for (let i = 0; i < parsedLyrics.length; i++) {
             if (parsedLyrics[i].time <= currentTime) {
                 newLineIndex = i;
             } else {
+                // 找到第一个时间大于当前时间的行，停止
                 break;
             }
         }
 
-        // 只在行改变时才滚动（避免频繁滚动）
-        if (newLineIndex === currentLyricIndex) {
+        // 检测进度跳跃（用户拖动进度条）
+        const progressDelta = Math.abs(currentTime - lastProgressRef.current);
+        const isSeeking = progressDelta > 2; // 如果跳跃超过 2 秒，认为是用户拖动
+        lastProgressRef.current = currentTime;
+
+        // 只在行改变时才滚动
+        if (newLineIndex === currentLyricIndex && !isSeeking) {
             return;
         }
 
         setCurrentLyricIndex(newLineIndex);
 
-        // 节流：限制滚动频率（最少间隔 300ms）
+        // 如果是跳跃，立即滚动（忽略节流）
+        // 否则使用节流限制滚动频率
         const now = Date.now();
-        if (now - lastScrollTimeRef.current < 300) {
+        if (!isSeeking && now - lastScrollTimeRef.current < 300) {
             return;
         }
         lastScrollTimeRef.current = now;
@@ -132,8 +192,12 @@ export function MusicPlayerWidget() {
                 const elementHeight = currentElement.clientHeight;
                 const scrollTop = elementTop - containerHeight / 2 + elementHeight / 2;
 
-                // 使用 instant 滚动，避免 smooth 导致的抖动
-                container.scrollTop = Math.max(0, scrollTop);
+                // 如果是跳跃，使用 instant 滚动（立即跳转）
+                // 否则使用 smooth 滚动（平滑过渡）
+                container.scrollTo({
+                    top: Math.max(0, scrollTop),
+                    behavior: isSeeking ? 'instant' : 'smooth'
+                });
             }
         });
     }, [progress, parsedLyrics, showLyrics, currentLyricIndex]);
@@ -143,7 +207,58 @@ export function MusicPlayerWidget() {
         setShowLyrics(false);
         setCurrentLyricIndex(-1);
         lastScrollTimeRef.current = 0;
+        lastProgressRef.current = 0; // 重置进度跟踪
     }, [currentSong?.id]);
+
+    // 切换歌词显示状态时，重置并立即滚动到当前位置
+    useEffect(() => {
+        if (showLyrics && lyricsContainerRef.current) {
+            // 重置状态
+            setCurrentLyricIndex(-1);
+            lastScrollTimeRef.current = 0;
+            lastProgressRef.current = latestProgressRef.current;
+
+            // 使用最新的进度和歌词
+            const currentTime = latestProgressRef.current;
+            const currentLyrics = latestParsedLyricsRef.current;
+
+            if (currentLyrics.length === 0) return;
+
+            // 立即滚动到当前进度对应的歌词行
+            let targetLineIndex = 0;
+
+            for (let i = 0; i < currentLyrics.length; i++) {
+                if (currentLyrics[i].time <= currentTime) {
+                    targetLineIndex = i;
+                } else {
+                    break;
+                }
+            }
+
+            setCurrentLyricIndex(targetLineIndex);
+
+            // 延迟一帧确保 DOM 已渲染
+            requestAnimationFrame(() => {
+                const container = lyricsContainerRef.current;
+                if (!container) return;
+
+                const lineElements = container.querySelectorAll('.lyrics-line');
+                const targetElement = lineElements[targetLineIndex] as HTMLElement;
+
+                if (targetElement) {
+                    const containerHeight = container.clientHeight;
+                    const elementTop = targetElement.offsetTop;
+                    const elementHeight = targetElement.clientHeight;
+                    const scrollTop = elementTop - containerHeight / 2 + elementHeight / 2;
+
+                    container.scrollTo({
+                        top: Math.max(0, scrollTop),
+                        behavior: 'instant'
+                    });
+                }
+            });
+        }
+    }, [showLyrics]); // 只依赖 showLyrics，使用 ref 获取最新值
 
     // 格式化时间
     const formatTime = (seconds: number) => {
@@ -153,7 +268,7 @@ export function MusicPlayerWidget() {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    // 解析 LRC 歌词格式
+    // 解析 LRC 歌词格式（支持两种格式）
     const parseLyrics = (lrcText: string) => {
         if (!lrcText) return [];
 
@@ -161,8 +276,10 @@ export function MusicPlayerWidget() {
         const parsed: Array<{ time: number; text: string }> = [];
 
         for (const line of lines) {
-            // 匹配 [mm:ss.xx] 或 [mm:ss] 格式的时间标签
-            const match = line.match(/\[(\d{2}):(\d{2})\.?(\d{2})?\](.*)/);
+            // 格式1: [分:秒.毫秒] 标准LRC格式
+            // 例如: [03:45.12]歌词内容
+            let match = line.match(/\[(\d{2}):(\d{2})\.?(\d{2})?\](.*)/);
+
             if (match) {
                 const minutes = parseInt(match[1]);
                 const seconds = parseInt(match[2]);
@@ -173,6 +290,18 @@ export function MusicPlayerWidget() {
                 if (text) {
                     parsed.push({ time, text });
                 }
+            } else {
+                // 格式2: [秒.毫秒] 简化格式（MusicFree 返回的格式）
+                // 例如: [225.12]歌词内容
+                match = line.match(/\[(\d+\.?\d*)\](.*)/);
+                if (match) {
+                    const time = parseFloat(match[1]);
+                    const text = match[2].trim();
+
+                    if (text && !isNaN(time)) {
+                        parsed.push({ time, text });
+                    }
+                }
             }
         }
 
@@ -181,26 +310,19 @@ export function MusicPlayerWidget() {
 
     // 获取并解析歌词
     const fetchLyrics = async (song: Song) => {
-        console.log('🎵 [Lyrics] Fetching lyrics for song:', song.name, 'lyric_id:', song.lyric_id);
-
         if (!song.lyric_id) {
-            console.warn('🎵 [Lyrics] No lyric_id for song:', song.name);
             setLyrics('');
             setParsedLyrics([]);
             return;
         }
 
         try {
-            console.log('🎵 [Lyrics] Calling GetLyric API with lyric_id:', song.lyric_id);
-            const lyricText = await MusicPlayerService.GetLyric(song.lyric_id);
-            console.log('🎵 [Lyrics] Got lyric text (length:', lyricText.length, '):', lyricText.substring(0, 100));
-
+            // 传递完整的 song 对象，而不只是 lyric_id
+            const lyricText = await MusicPlayerService.GetLyric(song);
             setLyrics(lyricText);
             const parsed = parseLyrics(lyricText);
-            console.log('🎵 [Lyrics] Parsed', parsed.length, 'lines:', parsed.slice(0, 3));
             setParsedLyrics(parsed);
         } catch (error) {
-            console.error('🎵 [Lyrics] Failed to load lyrics:', error);
             setLyrics('');
             setParsedLyrics([]);
         }
@@ -210,18 +332,14 @@ export function MusicPlayerWidget() {
     const preloadMoreSongs = async () => {
         // 防止重复预加载
         if (isPreloading) {
-            console.log('🎵 [Preload] Already preloading, skip');
             return;
         }
 
         setIsPreloading(true);
         try {
-            console.log('🎵 [Preload] Starting preload...');
             const newSongs = await MusicPlayerService.GetRandomSongs(5);
-            console.log('🎵 [Preload] Preloaded', newSongs.length, 'songs');
             setPreloadQueue(prev => [...prev, ...newSongs]);
         } catch (error) {
-            console.error('🎵 [Preload] Failed to preload songs:', error);
             // 失败后等待5秒再重试，避免频繁请求
             setTimeout(() => {
                 setIsPreloading(false);
@@ -235,7 +353,6 @@ export function MusicPlayerWidget() {
     // 随机播放（使用预加载队列）
     const playRandom = async () => {
         if (isLoading) {
-            console.log('🎵 [Random] Already loading, skip');
             return;
         }
 
@@ -250,20 +367,17 @@ export function MusicPlayerWidget() {
 
             // 如果预加载队列有歌曲，直接使用
             if (preloadQueue.length >= 3) {
-                console.log('🎵 [Random] Using preload queue, size:', preloadQueue.length);
                 songsToPlay = preloadQueue.slice(0, 10);
                 // 从队列中移除已使用的歌曲
                 setPreloadQueue(prev => prev.slice(10));
             } else {
                 // 队列不足，直接加载
-                console.log('🎵 [Random] Preload queue insufficient, loading directly...');
                 const results = await MusicPlayerService.GetRandomSongs(10);
                 songsToPlay = results;
             }
 
-            // 预加载封面图片
-            console.log('🎵 [Random] Preloading covers for', songsToPlay.length, 'songs');
-            const coverMap = new Map<string, string>();
+            // 预加载封面图片（保留已有缓存）
+            const coverMap = new Map(songCovers);
             await Promise.all(
                 songsToPlay.map(async (song) => {
                     if (song.pic_id) {
@@ -271,7 +385,7 @@ export function MusicPlayerWidget() {
                             const picURL = await MusicPlayerService.GetPicURL(song.pic_id);
                             coverMap.set(song.id, picURL);
                         } catch (error) {
-                            console.error(`🎵 [Random] Failed to load cover for ${song.name}:`, error);
+                            // 忽略单个封面加载失败
                         }
                     }
                 })
@@ -292,7 +406,7 @@ export function MusicPlayerWidget() {
                 }
             }, 1000);
         } catch (error) {
-            console.error('🎵 [Random] Failed to get random songs:', error);
+            // 忽略错误
         } finally {
             setIsLoading(false);
         }
@@ -302,11 +416,11 @@ export function MusicPlayerWidget() {
     const searchSongs = async () => {
         if (!searchKeyword.trim()) return;
 
-        console.log('🎵 [Search] Starting search for:', searchKeyword);
         setIsLoading(true);
+        setSearchPage(1); // 重置页码
+        setHasMoreResults(true); // 重置是否有更多结果
         try {
-            const results = await MusicPlayerService.Search(searchKeyword);
-            console.log('🎵 [Search] Got', results.length, 'results');
+            const results = await MusicPlayerService.Search(searchKeyword, 1);
             setSongs(results);
 
             if (results.length > 0) {
@@ -315,35 +429,75 @@ export function MusicPlayerWidget() {
                 checkIfLiked(results[0]);
             }
 
-            // 预加载搜索结果的封面图片
-            console.log('🎵 [Search] Starting cover preload...');
-            const coverMap = new Map<string, string>();
-            console.log('🎵 [Search] Preloading covers for', results.length, 'songs');
+            // 如果返回结果少于20条，说明没有更多了
+            if (results.length < 20) {
+                setHasMoreResults(false);
+            }
 
+            // 预加载搜索结果的封面图片（保留已有缓存）
+            const coverMap = new Map(songCovers);
             await Promise.all(
                 results.map(async (song) => {
-                    console.log(`🎵 [Search] Song ${song.name}: pic_id="${song.pic_id}"`);
                     if (song.pic_id) {
                         try {
                             const picURL = await MusicPlayerService.GetPicURL(song.pic_id);
-                            console.log(`🎵 [Search] Got cover URL for ${song.name}:`, picURL);
                             coverMap.set(song.id, picURL);
                         } catch (error) {
-                            console.error(`🎵 [Search] Failed to load cover for ${song.name} (id=${song.id}, pic_id="${song.pic_id}"):`, error);
+                            // 忽略单个封面加载失败
                         }
-                    } else {
-                        console.warn(`🎵 [Search] Song ${song.name} has no pic_id`);
                     }
                 })
             );
-
-            console.log('🎵 [Search] Final coverMap size:', coverMap.size, 'keys:', Array.from(coverMap.keys()));
             setSongCovers(coverMap);
-            console.log('🎵 [Search] Cover preload complete');
         } catch (error) {
-            console.error('🎵 [Search] Search failed:', error);
+            // 忽略错误
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    // 加载更多搜索结果
+    const loadMoreSearchResults = async () => {
+        if (isLoadingMore || !hasMoreResults || !searchKeyword.trim()) return;
+
+        setIsLoadingMore(true);
+        try {
+            const nextPage = searchPage + 1;
+            const results = await MusicPlayerService.Search(searchKeyword, nextPage);
+
+            if (results.length === 0) {
+                setHasMoreResults(false);
+            } else {
+                // 追加新结果到现有列表
+                setSongs(prev => [...prev, ...results]);
+
+                // 预加载新结果的封面图片
+                const coverMap = new Map(songCovers);
+                await Promise.all(
+                    results.map(async (song) => {
+                        if (song.pic_id) {
+                            try {
+                                const picURL = await MusicPlayerService.GetPicURL(song.pic_id);
+                                coverMap.set(song.id, picURL);
+                            } catch (error) {
+                                // 忽略单个封面加载失败
+                            }
+                        }
+                    })
+                );
+                setSongCovers(coverMap);
+
+                setSearchPage(nextPage);
+
+                // 如果返回结果少于20条，说明没有更多了
+                if (results.length < 20) {
+                    setHasMoreResults(false);
+                }
+            }
+        } catch (error) {
+            // 忽略错误
+        } finally {
+            setIsLoadingMore(false);
         }
     };
 
@@ -351,19 +505,11 @@ export function MusicPlayerWidget() {
     const playSong = async (song: Song, retryCount = 0) => {
         if (!audioRef.current) return;
 
-        console.log('🎵 [PlaySong] Playing song:', {
-            name: song.name,
-            id: song.id,
-            lyric_id: song.lyric_id,
-            pic_id: song.pic_id
-        });
-
         try {
             // 使用 GetSongURLWithMetadata 以确保能获取 URL
             const url = await MusicPlayerService.GetSongURLWithMetadata(song, '320k');
 
             if (!url) {
-                console.error('🎵 No URL returned for song:', song.id);
                 if (retryCount < 3) {
                     setTimeout(() => playSong(song, retryCount + 1), 1000);
                 }
@@ -371,9 +517,28 @@ export function MusicPlayerWidget() {
             }
 
             setCurrentSong(song);
-            audioRef.current.src = url;
-            await audioRef.current.play();
-            setIsPlaying(true);
+
+            // 🔧 关键修复：在设置新 src 之前，先清理 audio 元素状态
+            const audio = audioRef.current;
+
+            // 1. 暂停当前播放
+            audio.pause();
+
+            // 2. 移除旧的 src，触发网络请求中止
+            audio.removeAttribute('src');
+
+            // 3. 重置音频元素状态
+            audio.load();
+
+            // 4. 设置新的 src
+            audio.src = url;
+
+            try {
+                await audioRef.current.play();
+                setIsPlaying(true);
+            } catch (playError: any) {
+                throw playError;
+            }
 
             // 获取封面图片URL
             if (song.pic_id) {
@@ -381,7 +546,6 @@ export function MusicPlayerWidget() {
                     const picURL = await MusicPlayerService.GetPicURL(song.pic_id);
                     setCoverURL(picURL);
                 } catch (error) {
-                    console.error('Failed to get cover URL:', error);
                     setCoverURL('');
                 }
             } else {
@@ -391,7 +555,7 @@ export function MusicPlayerWidget() {
             // 获取歌词
             await fetchLyrics(song);
         } catch (error) {
-            console.error('🎵 Failed to get song URL:', error);
+            // 忽略错误
         }
     };
 
@@ -402,7 +566,7 @@ export function MusicPlayerWidget() {
             const liked = likeList.some(s => s.id === song.id);
             setIsLiked(liked);
         } catch (error) {
-            console.error('Failed to check like status:', error);
+            // 忽略错误
         }
     };
 
@@ -414,7 +578,10 @@ export function MusicPlayerWidget() {
             audioRef.current.pause();
             setIsPlaying(false);
         } else {
-            if (audioRef.current.src) {
+            // 如果没有当前歌曲且没有音频源，则随机播放
+            if (!currentSong && !audioRef.current.src) {
+                await playRandom();
+            } else if (audioRef.current.src) {
                 await audioRef.current.play();
                 setIsPlaying(true);
             }
@@ -474,7 +641,7 @@ export function MusicPlayerWidget() {
                 setIsLiked(true);
             }
         } catch (error) {
-            console.error('Failed to toggle like:', error);
+            // 忽略错误
         }
     };
 
@@ -543,7 +710,7 @@ export function MusicPlayerWidget() {
                             )}
                         </div>
 
-                        {/* 静态的歌词显示区域 */}
+                        {/* 静态的歌词显示区域 - 禁止用户滚动 */}
                         {showLyrics && (
                             <div className="vinyl-lyrics-display" ref={lyricsContainerRef}>
                                 {parsedLyrics.length > 0 ? (
@@ -684,14 +851,13 @@ export function MusicPlayerWidget() {
                             </div>
 
                             {songs.length > 0 && (
-                                <div className="vinyl-search-results">
+                                <div className="vinyl-search-results" ref={searchResultsRef}>
                                     {songs.map((song, index) => {
                                         const coverUrl = songCovers.get(song.id);
-                                        console.log(`🎵 [Render] Song ${index}: ${song.name}, coverUrl=`, coverUrl);
 
                                         return (
                                             <div
-                                                key={index}
+                                                key={`${song.id}-${index}`}
                                                 onClick={() => {
                                                     playSong(song);
                                                     setShowSearch(false);
@@ -716,6 +882,21 @@ export function MusicPlayerWidget() {
                                             </div>
                                         );
                                     })}
+
+                                    {/* 加载更多指示器 */}
+                                    {isLoadingMore && (
+                                        <div className="vinyl-search-loading-more">
+                                            <div className="vinyl-loading-spinner"></div>
+                                            <span>加载中...</span>
+                                        </div>
+                                    )}
+
+                                    {/* 没有更多结果提示 */}
+                                    {!hasMoreResults && songs.length > 0 && !isLoadingMore && (
+                                        <div className="vinyl-search-no-more">
+                                            已加载全部结果
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -1218,6 +1399,9 @@ export function MusicPlayerWidget() {
                     padding: 24px;
                     box-shadow: 0 0 40px rgba(0, 255, 255, 0.3);
                     position: relative;
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden;
                 }
 
                 .vinyl-search-close {
@@ -1281,8 +1465,11 @@ export function MusicPlayerWidget() {
                 .vinyl-search-results {
                     max-height: 400px;
                     overflow-y: auto;
+                    overflow-x: hidden;
                     scrollbar-width: thin;
                     scrollbar-color: rgba(0, 255, 255, 0.3) transparent;
+                    width: 100%;
+                    padding-right: 8px;
                 }
 
                 .vinyl-search-results::-webkit-scrollbar {
@@ -1308,6 +1495,9 @@ export function MusicPlayerWidget() {
                     margin-bottom: 8px;
                     background: rgba(255, 255, 255, 0.03);
                     border: 1px solid rgba(255, 255, 255, 0.05);
+                    width: 100%;
+                    box-sizing: border-box;
+                    flex-shrink: 0;
                 }
 
                 .vinyl-search-item:hover {
@@ -1341,6 +1531,7 @@ export function MusicPlayerWidget() {
                 .vinyl-search-info {
                     flex: 1;
                     min-width: 0;
+                    overflow: hidden;
                 }
 
                 .vinyl-search-title {
@@ -1361,6 +1552,39 @@ export function MusicPlayerWidget() {
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
+                }
+
+                .vinyl-search-loading-more {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 12px;
+                    padding: 20px;
+                    color: rgba(0, 255, 255, 0.7);
+                    font-family: 'Rajdhani', sans-serif;
+                    font-size: 14px;
+                    width: 100%;
+                    flex-shrink: 0;
+                }
+
+                .vinyl-search-loading-more .vinyl-loading-spinner {
+                    width: 24px;
+                    height: 24px;
+                    border: 2px solid transparent;
+                    border-top-color: #00ffff;
+                    border-right-color: #ff0080;
+                    border-radius: 50%;
+                    animation: vinyl-loading-spin 1s linear infinite;
+                }
+
+                .vinyl-search-no-more {
+                    text-align: center;
+                    padding: 16px;
+                    color: rgba(255, 255, 255, 0.3);
+                    font-family: 'Rajdhani', sans-serif;
+                    font-size: 13px;
+                    width: 100%;
+                    flex-shrink: 0;
                 }
             `}</style>
         </>

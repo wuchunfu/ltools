@@ -75,12 +75,30 @@ func NewProcessManager(config *ProcessManagerConfig) (*ProcessManager, error) {
 
 	// 检查服务目录是否存在
 	if _, err := os.Stat(config.ServiceDir); os.IsNotExist(err) {
-		return nil, fmt.Errorf("lx-music-service directory not found: %s", config.ServiceDir)
+		return nil, fmt.Errorf(`lx-music-service directory not found: %s
+
+This directory is required for music player functionality.
+Expected location: next to the application executable or in the project root during development.
+
+If you're a user:
+  Please ensure the application was installed correctly with all bundled files.
+
+If you're a developer:
+  Run 'task package:production' to prepare all dependencies before building`, config.ServiceDir)
 	}
 
 	// 检查 Node.js 是否安装
 	if err := checkNodeInstalled(config.NodePath); err != nil {
-		return nil, fmt.Errorf("Node.js not found: %w. Please install Node.js >= 16.0.0", err)
+		return nil, fmt.Errorf(`Node.js check failed: %w
+
+The music player plugin requires Node.js to run the music source service.
+
+Please install Node.js:
+  • Download from: https://nodejs.org/
+  • Recommended: LTS version (Long Term Support)
+  • Minimum required: Node.js 16.0.0 or later
+
+After installation, restart the application.`, err)
 	}
 
 	return &ProcessManager{
@@ -257,10 +275,24 @@ func checkNodeInstalled(nodePath string) error {
 	cmd := exec.Command(nodePath, "--version")
 	output, err := cmd.Output()
 	if err != nil {
-		return err
+		return fmt.Errorf("node.js not found at '%s': %w", nodePath, err)
 	}
 
-	log.Printf("[ProcessManager] Node.js version: %s", string(output))
+	version := string(output)
+	log.Printf("[ProcessManager] Node.js version: %s", version)
+
+	// 解析版本号，检查是否 >= 16.0.0
+	var major, minor, patch int
+	if _, err := fmt.Sscanf(version, "v%d.%d.%d", &major, &minor, &patch); err != nil {
+		log.Printf("[ProcessManager] Warning: Could not parse Node.js version: %s", version)
+		return nil // 如果无法解析，继续执行
+	}
+
+	if major < 16 {
+		return fmt.Errorf("Node.js version %d.%d.%d is too old. Please upgrade to Node.js >= 16.0.0 (recommended: LTS version from https://nodejs.org)", major, minor, patch)
+	}
+
+	log.Printf("[ProcessManager] Node.js version check passed: v%d.%d.%d", major, minor, patch)
 	return nil
 }
 

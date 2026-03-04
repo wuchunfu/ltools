@@ -10,6 +10,15 @@ const path = require('path');
 class MusicFreeAdapter {
   constructor() {
     this.plugins = new Map();
+    // 缓存原始 musicItem 数据（用于歌词/图片获取）
+    // key: `${pluginId}:${songId}`, value: 原始 item
+    this.musicItemCache = new Map();
+    // 多音源缓存：同一首歌在不同音源的数据
+    // key: songName:artist, value: Array<{pluginId, item, songId}>
+    this.multiSourceCache = new Map();
+    // 音源成功率统计
+    // key: pluginId, value: {success: number, fail: number}
+    this.sourceStats = new Map();
   }
 
   /**
@@ -103,19 +112,42 @@ class MusicFreeAdapter {
         return { songs: [], total: 0, page };
       }
 
-      // 转换为 LX Music 格式
-      const convertedSongs = songs.slice(0, limit).map((item) => ({
-        id: item.id || item.songid,
-        name: item.title || item.name,
-        singer: item.artist || item.author || '',
-        source: pluginId,
-        interval: item.interval || '',
-        meta: {
-          songId: item.id || item.songid,
-          albumName: item.album || '',
-          picUrl: item.artwork || item.pic || '',
-        },
-      }));
+      // 转换为 LX Music 格式（同时保留原始数据）
+      const convertedSongs = songs.slice(0, limit).map((item) => {
+        const songId = item.id || item.songid;
+
+        // 缓存原始数据（用于后续的歌词/图片获取）
+        const cacheKey = `${pluginId}:${songId}`;
+        this.musicItemCache.set(cacheKey, item);
+
+        // 建立多音源索引（用于降级）
+        const songName = (item.title || item.name || '').trim().toLowerCase();
+        const artist = (item.artist || item.author || '').trim().toLowerCase();
+        const multiSourceKey = `${songName}:${artist}`;
+
+        if (!this.multiSourceCache.has(multiSourceKey)) {
+          this.multiSourceCache.set(multiSourceKey, []);
+        }
+        this.multiSourceCache.get(multiSourceKey).push({
+          pluginId,
+          item,
+          songId,
+        });
+
+        return {
+          id: songId,
+          name: item.title || item.name,
+          singer: item.artist || item.author || '',
+          source: pluginId,
+          interval: item.interval || '',
+          album: item.album || '',
+          meta: {
+            songId: songId,
+            albumName: item.album || '',
+            picUrl: item.artwork || item.pic || '',
+          },
+        };
+      });
 
       return {
         songs: convertedSongs,
@@ -158,21 +190,161 @@ class MusicFreeAdapter {
   }
 
   /**
-   * 获取歌词
+   * 根据成功率获取音源优先级
+   */
+  getSourcePriority(pluginId) {
+    const stats = this.sourceStats.get(pluginId);
+    if (!stats || stats.success + stats.fail === 0) {
+      return 0.5; // 新音源，默认中等优先级
+    }
+    return stats.success / (stats.success + stats.fail);
+  }
+
+  /**
+   * 更新音源统计
+   */
+  updateSourceStats(pluginId, success) {
+    if (!this.sourceStats.has(pluginId)) {
+      this.sourceStats.set(pluginId, { success: 0, fail: 0 });
+    }
+    const stats = this.sourceStats.get(pluginId);
+    if (success) {
+      stats.success++;
+    } else {
+      stats.fail++;
+    }
+  }
+
+  /**
+   * 查找同一首歌的其他音源
+   */
+  findAlternativeSources(musicItem) {
+    const songName = (musicItem.name || musicItem.title || '').trim().toLowerCase();
+    const artist = (musicItem.singer || musicItem.artist || musicItem.author || '').trim().toLowerCase();
+    const key = `${songName}:${artist}`;
+
+    const alternatives = this.multiSourceCache.get(key) || [];
+
+    // 按成功率排序，并过滤掉当前音源
+    return alternatives
+      .filter(alt => alt.pluginId !== musicItem.source && alt.songId !== musicItem.id)
+      .sort((a, b) => this.getSourcePriority(b.pluginId) - this.getSourcePriority(a.pluginId));
+  }
+
+  /**
+   * 更新音源统计
+   */
+  updateSourceStats(pluginId, success) {
+    if (!this.sourceStats.has(pluginId)) {
+      this.sourceStats.set(pluginId, { success: 0, fail: 0 });
+    }
+    const stats = this.sourceStats.get(pluginId);
+    if (success) {
+      stats.success++;
+    } else {
+      stats.fail++;
+    }
+  }
+
+  /**
+   * 获取歌词（带重试和多音源降级）
    */
   async getLyric(pluginId, musicItem) {
-    const plugin = this.plugins.get(pluginId);
+    // 尝试从缓存中获取原始 musicItem
+    const cacheKey = `${pluginId}:${musicItem.id}`;
+    const cachedItem = this.musicItemCache.get(cacheKey);
 
-    if (!plugin || !plugin.getLyric) {
-      return { lyric: '', tlyric: '' };
+    // 优先使用缓存的原始数据，否则使用传入的 musicItem
+    let itemToUse = cachedItem || musicItem;
+
+    // 如果没有缓存，构造兼容格式
+    if (!cachedItem) {
+      itemToUse = {
+        ...musicItem,
+        songid: musicItem.id,
+        title: musicItem.name || musicItem.title,
+        artist: musicItem.singer || musicItem.artist || musicItem.author,
+        author: musicItem.singer || musicItem.artist || musicItem.author,
+      };
     }
 
-    const result = await plugin.getLyric(musicItem);
+    // 收集所有候选音源（包括原始音源）
+    const alternatives = this.findAlternativeSources(musicItem);
+    const allSources = [
+      { pluginId, item: itemToUse, isOriginal: true },
+      ...alternatives.map(alt => ({
+        pluginId: alt.pluginId,
+        item: alt.item,
+        isOriginal: false
+      }))
+    ];
 
-    return {
-      lyric: result?.lrc || '',
-      tlyric: result?.translation || '',
-    };
+    if (allSources.length > 1) {
+      console.error(`[MusicFreeAdapter] Multi-source fallback: ${allSources.length} sources available (1 original + ${alternatives.length} alternatives)`);
+    }
+
+    // 尝试每个音源（最多 3 个）
+    const maxSources = Math.min(3, allSources.length);
+
+    for (let sourceIdx = 0; sourceIdx < maxSources; sourceIdx++) {
+      const source = allSources[sourceIdx];
+      const plugin = this.plugins.get(source.pluginId);
+
+      if (!plugin || !plugin.getLyric) {
+        continue;
+      }
+
+      // 对每个音源最多重试 2 次
+      const maxRetries = 2;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const result = await plugin.getLyric(source.item);
+
+          // 处理不同的返回格式
+          let lyric = '';
+          let tlyric = '';
+
+          if (!result) {
+            if (attempt < maxRetries) {
+              await new Promise(resolve => setTimeout(resolve, 300 * attempt));
+              continue;
+            }
+          } else if (typeof result === 'string') {
+            lyric = result;
+          } else if (typeof result === 'object') {
+            lyric = result.rawLrc || result.lrc || result.lyric || result.lrclist || result.text || '';
+            tlyric = result.translation || result.tlyric || result.translated || '';
+          }
+
+          // 成功获取歌词
+          if (lyric.length > 0) {
+            if (!source.isOriginal) {
+              console.error(`[MusicFreeAdapter] Fallback to alternative source: ${source.pluginId} (lyric length: ${lyric.length})`);
+            }
+            this.updateSourceStats(source.pluginId, true);
+            return { lyric, tlyric };
+          }
+
+          // 歌词为空，重试
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 300 * attempt));
+          }
+        } catch (err) {
+          if (attempt === maxRetries) {
+            // 这个音源所有重试都失败了
+            this.updateSourceStats(source.pluginId, false);
+            if (sourceIdx < maxSources - 1) {
+              console.error(`[MusicFreeAdapter] Source ${source.pluginId} failed: ${err.message}, trying next source...`);
+            }
+          } else {
+            await new Promise(resolve => setTimeout(resolve, 300 * attempt));
+          }
+        }
+      }
+    }
+
+    console.error(`[MusicFreeAdapter] All ${maxSources} sources failed for song: ${musicItem.name || musicItem.title}`);
+    return { lyric: '', tlyric: '' };
   }
 
   /**

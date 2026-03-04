@@ -58,3 +58,28 @@ tasks:
     summary: Builds and runs the Docker image
     cmds:
       - task: common:run:docker
+
+  package:production:
+    summary: Build and package application for production distribution
+    desc: |
+      Complete production build including:
+      1. Installing all dependencies (frontend + lx-music-service)
+      2. Building the application
+      3. Preparing distribution package
+
+      Usage: task package:production
+    deps:
+      - task: common:package:lx-music-service
+    cmds:
+      - task: build
+      - |
+        echo "Production build complete!"
+        echo ""
+        echo "Next steps:"
+        echo "  1. The application binary is in: bin/"
+        echo "  2. Ensure lx-music-service/ is distributed alongside the binary"
+        echo "  3. Users need Node.js >= 16.0.0 installed"
+        echo ""
+        echo "Distribution structure:"
+        ls -lh bin/ || true
+        du -sh lx-music-service/ || true
