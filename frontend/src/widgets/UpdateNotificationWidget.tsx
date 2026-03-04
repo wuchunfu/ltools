@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Events } from '@wailsio/runtime';
-import { Update as UpdateService } from '../../bindings/internal/update';
+import * as UpdateService from '../../bindings/ltools/internal/update/service';
 import { Icon } from '../components/Icon';
 
 interface UpdateInfo {
@@ -25,14 +25,21 @@ export function UpdateNotification() {
 
   useEffect(() => {
     // 监听更新可用事件
-    const unsubscribe = Events.On('update:available', (ev: { data: UpdateInfo }) => {
+    const unsubscribeUpdate = Events.On('update:available', (ev: { data: UpdateInfo }) => {
       console.log('Update available:', ev.data);
       setUpdateInfo(ev.data);
       setDismissed(false);
     });
 
+    // 预留：监听下载进度事件（后端未实现）
+    const unsubscribeProgress = Events.On('update:progress', (ev: { data: number }) => {
+      console.log('Download progress:', ev.data);
+      setDownloadProgress(ev.data);
+    });
+
     return () => {
-      unsubscribe();
+      unsubscribeUpdate();
+      unsubscribeProgress();
     };
   }, []);
 
