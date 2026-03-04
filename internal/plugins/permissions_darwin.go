@@ -31,7 +31,7 @@ func CheckAccessibilityPermissions() (bool, error) {
 	}
 
 	enabled := C.checkAccessibilityPermissions()
-	return enabled == 1, nil
+	return enabled != 0, nil
 }
 
 // OpenAccessibilitySettings opens System Preferences to the Accessibility section
