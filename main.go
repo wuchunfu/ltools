@@ -196,6 +196,10 @@ func init() {
 	application.RegisterEvent[string]("localtranslate:started")
 	application.RegisterEvent[string]("localtranslate:completed")
 	application.RegisterEvent[string]("localtranslate:error")
+
+	// Register custom events for the update service
+	application.RegisterEvent[*update.UpdateInfo]("update:available")
+	application.RegisterEvent[int]("update:progress")
 }
 
 // main function serves as the application's entry point. It initializes the application, creates a window,
@@ -551,7 +555,7 @@ func main() {
 		UpdateURL:      "https://raw.githubusercontent.com/lian-yang/ltools/main/",
 		DataDir:        dataDir,
 		Enabled:        true, // TODO: 从用户配置读取
-	})
+	}, app)
 
 	// Register services
 	app.RegisterService(application.NewService(pluginService))

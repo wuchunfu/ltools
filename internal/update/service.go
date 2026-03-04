@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // Service 更新服务（自定义实现）
@@ -21,6 +23,7 @@ type Service struct {
 	enabled        bool
 	client         *http.Client
 	dataDir        string
+	app            *application.App
 }
 
 // UpdateInfo 更新信息（用于前端）
@@ -69,12 +72,13 @@ type ServiceConfig struct {
 }
 
 // NewService 创建更新服务
-func NewService(config *ServiceConfig) *Service {
+func NewService(config *ServiceConfig, app *application.App) *Service {
 	return &Service{
 		currentVersion: config.CurrentVersion,
 		updateURL:      config.UpdateURL,
 		enabled:        config.Enabled,
 		dataDir:        config.DataDir,
+		app:            app,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -160,6 +164,12 @@ func (s *Service) DownloadUpdate(url string, expectedChecksum string) (string, e
 		return "", fmt.Errorf("download failed with status: %d", resp.StatusCode)
 	}
 
+	// 获取文件总大小
+	totalSize := resp.ContentLength
+	if totalSize <= 0 {
+		log.Printf("[UpdateService] Warning: Content-Length is %d, progress tracking may be inaccurate", totalSize)
+	}
+
 	// 创建临时文件
 	tmpFile := filepath.Join(downloadDir, "update-download.tmp")
 	out, err := os.Create(tmpFile)
@@ -170,13 +180,26 @@ func (s *Service) DownloadUpdate(url string, expectedChecksum string) (string, e
 
 	// 计算校验和
 	hash := sha256.New()
-	multiWriter := io.MultiWriter(out, hash)
+
+	// 创建进度写入器
+	progressWriter := &progressWriter{
+		writer:    out,
+		hash:      hash,
+		total:     totalSize,
+		app:       s.app,
+		lastEmit:  time.Now(),
+	}
 
 	// 复制数据
-	written, err := io.Copy(multiWriter, resp.Body)
+	written, err := io.Copy(progressWriter, resp.Body)
 	if err != nil {
 		os.Remove(tmpFile)
 		return "", fmt.Errorf("failed to write file: %w", err)
+	}
+
+	// 发送最终进度（100%）
+	if s.app != nil && totalSize > 0 {
+		s.app.Event.Emit("update:progress", 100)
 	}
 
 	// 验证校验和
@@ -303,4 +326,42 @@ func (s *Service) Cleanup() error {
 	}
 
 	return os.RemoveAll(downloadDir)
+}
+
+// progressWriter 用于跟踪下载进度并发送事件
+type progressWriter struct {
+	writer    io.Writer
+	hash      io.Writer
+	total     int64
+	written   int64
+	app       *application.App
+	lastEmit  time.Time
+}
+
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	// 写入文件和哈希
+	n, err := pw.writer.Write(p)
+	if err != nil {
+		return n, err
+	}
+
+	_, err = pw.hash.Write(p[:n])
+	if err != nil {
+		return n, err
+	}
+
+	// 更新已写入字节数
+	pw.written += int64(n)
+
+	// 每 200ms 发送一次进度事件（避免过于频繁）
+	if pw.app != nil && pw.total > 0 && time.Since(pw.lastEmit) > 200*time.Millisecond {
+		percentage := int(float64(pw.written) / float64(pw.total) * 100)
+		if percentage > 100 {
+			percentage = 100
+		}
+		pw.app.Event.Emit("update:progress", percentage)
+		pw.lastEmit = time.Now()
+	}
+
+	return n, nil
 }

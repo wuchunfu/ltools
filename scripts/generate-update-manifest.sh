@@ -85,7 +85,7 @@ PACKAGES_FOUND=0
 
 if check_package "darwin-arm64" "tar.gz"; then PACKAGES_FOUND=$((PACKAGES_FOUND + 1)); fi
 if check_package "darwin-amd64" "tar.gz"; then PACKAGES_FOUND=$((PACKAGES_FOUND + 1)); fi
-if check_package "windows-amd64-portable" "zip"; then PACKAGES_FOUND=$((PACKAGES_FOUND + 1)); fi
+if check_package "windows-amd64-installer" "exe"; then PACKAGES_FOUND=$((PACKAGES_FOUND + 1)); fi
 if check_package "linux-amd64" "AppImage"; then PACKAGES_FOUND=$((PACKAGES_FOUND + 1)); fi
 
 if [ $PACKAGES_FOUND -eq 0 ]; then
@@ -112,7 +112,7 @@ cat > "$OUTPUT_FILE" <<EOF
   "releaseNotes": "## 新功能\n- 自动更新机制\n\n## 改进\n- 性能优化\n\n## 修复\n- Bug 修复",
   "mandatory": false,
   "platforms": {
-$(generate_platform_info "darwin-arm64" "tar.gz")$(generate_platform_info "darwin-amd64" "tar.gz")$(generate_platform_info "windows-amd64-portable" "zip")$(generate_platform_info "linux-amd64" "AppImage")
+$(generate_platform_info "darwin-arm64" "tar.gz")$(generate_platform_info "darwin-amd64" "tar.gz")$(generate_platform_info "windows-amd64-installer" "exe")$(generate_platform_info "linux-amd64" "AppImage")
   }
 }
 EOF

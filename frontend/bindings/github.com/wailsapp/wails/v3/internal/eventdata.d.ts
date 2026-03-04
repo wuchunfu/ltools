@@ -8,6 +8,9 @@ import type { Events } from "@wailsio/runtime";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import type * as plugins$0 from "../../../../../ltools/internal/plugins/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import type * as update$0 from "../../../../../ltools/internal/update/models.js";
 
 declare module "@wailsio/runtime" {
     namespace Events {
@@ -118,6 +121,8 @@ declare module "@wailsio/runtime" {
             "tunnel:stopped": string;
             "tunnel:updated": string;
             "tunnel:url": any;
+            "update:available": update$0.UpdateInfo | null;
+            "update:progress": number;
         }
     }
 }

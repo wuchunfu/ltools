@@ -9,10 +9,14 @@ import { Create as $Create } from "@wailsio/runtime";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as plugins$0 from "../../../../../ltools/internal/plugins/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as update$0 from "../../../../../ltools/internal/update/models.js";
 
 function configure() {
     Object.freeze(Object.assign($Create.Events, {
         "search:results": $$createType2,
+        "update:available": $$createType4,
     }));
 }
 
@@ -20,5 +24,7 @@ function configure() {
 const $$createType0 = plugins$0.SearchResult.createFrom;
 const $$createType1 = $Create.Nullable($$createType0);
 const $$createType2 = $Create.Array($$createType1);
+const $$createType3 = update$0.UpdateInfo.createFrom;
+const $$createType4 = $Create.Nullable($$createType3);
 
 configure();

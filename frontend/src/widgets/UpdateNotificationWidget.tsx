@@ -25,16 +25,20 @@ export function UpdateNotification() {
 
   useEffect(() => {
     // 监听更新可用事件
-    const unsubscribeUpdate = Events.On('update:available', (ev: { data: UpdateInfo }) => {
+    const unsubscribeUpdate = Events.On('update:available', (ev) => {
       console.log('Update available:', ev.data);
-      setUpdateInfo(ev.data);
-      setDismissed(false);
+      if (ev.data) {
+        setUpdateInfo(ev.data);
+        setDismissed(false);
+      }
     });
 
-    // 预留：监听下载进度事件（后端未实现）
-    const unsubscribeProgress = Events.On('update:progress', (ev: { data: number }) => {
+    // 监听下载进度事件
+    const unsubscribeProgress = Events.On('update:progress', (ev) => {
       console.log('Download progress:', ev.data);
-      setDownloadProgress(ev.data);
+      if (ev.data !== null && ev.data !== undefined) {
+        setDownloadProgress(ev.data);
+      }
     });
 
     return () => {
@@ -47,6 +51,8 @@ export function UpdateNotification() {
     if (!updateInfo) return;
 
     setDownloading(true);
+    setDownloaded(false);
+    setDownloadProgress(0);
     setError(null);
 
     try {
