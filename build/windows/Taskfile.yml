@@ -136,13 +136,9 @@ tasks:
       - echo "Preparing package directory with lx-music-service..."
       - |-
         {{if eq OS "windows"}}
-        if exist "{{.ROOT_DIR}}\lx-music-service" (
-          xcopy "{{.ROOT_DIR}}\lx-music-service" "lx-music-service\" /E /I /Y
-        )
+        powershell -Command "if (Test-Path '{{.ROOT_DIR}}\lx-music-service') { Copy-Item -Path '{{.ROOT_DIR}}\lx-music-service' -Destination 'lx-music-service' -Recurse -Force }"
         {{else}}
-        if [ -d "{{.ROOT_DIR}}/lx-music-service" ]; then
-          cp -r "{{.ROOT_DIR}}/lx-music-service" ./
-        fi
+        if [ -d "{{.ROOT_DIR}}/lx-music-service" ]; then cp -r "{{.ROOT_DIR}}/lx-music-service" ./; fi
         {{end}}
 
   create:msix:package:
