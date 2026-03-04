@@ -85,15 +85,20 @@ Section
     !insertmacro wails.webview2runtime
 
     SetOutPath $INSTDIR
-    
+
     !insertmacro wails.files
+
+    # Include lx-music-service directory
+    SetOutPath $INSTDIR\lx-music-service
+    File /r "lx-music-service\*.*"
+    SetOutPath $INSTDIR
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 
     !insertmacro wails.associateFiles
     !insertmacro wails.associateCustomProtocols
-    
+
     !insertmacro wails.writeUninstaller
 SectionEnd
 

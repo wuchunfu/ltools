@@ -1,15 +1,43 @@
+import { useState } from 'react';
 import { Icon } from './Icon';
 import { Browser } from '@wailsio/runtime';
+import * as UpdateService from '../../bindings/ltools/internal/update/service';
 
 /**
  * 关于页面组件
  * 显示应用版本信息、技术栈和相关链接
  */
 export function AboutSettings() {
+  const [checking, setChecking] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+
   const appVersion = '0.1.0';
   const goVersion = '1.25+';
   const wailsVersion = 'v3 (alpha)';
   const reactVersion = '18.2';
+
+  const handleCheckUpdate = async () => {
+    setChecking(true);
+    setUpdateMessage(null);
+
+    try {
+      const info = await UpdateService.CheckForUpdate();
+
+      if (info) {
+        setUpdateMessage(`发现新版本 ${info.version}`);
+        // 更新信息会通过事件发送到 UpdateNotification 组件显示
+      } else {
+        setUpdateMessage('您已经在使用最新版本！');
+        setTimeout(() => setUpdateMessage(null), 3000);
+      }
+    } catch (error) {
+      console.error('Check update failed:', error);
+      setUpdateMessage('检查更新失败，请稍后重试');
+      setTimeout(() => setUpdateMessage(null), 3000);
+    } finally {
+      setChecking(false);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -55,6 +83,35 @@ export function AboutSettings() {
           <VersionRow label="Go" value={goVersion} />
           <VersionRow label="Wails" value={wailsVersion} />
           <VersionRow label="React" value={reactVersion} />
+        </div>
+
+        {/* 检查更新按钮 */}
+        <div className="pt-3 border-t border-white/5">
+          <button
+            onClick={handleCheckUpdate}
+            disabled={checking}
+            className="w-full py-2.5 px-4 rounded-lg bg-gradient-to-r from-[#7C3AED] to-[#A78BFA] text-white font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            <Icon
+              name="refresh"
+              size={16}
+              color="white"
+              className={checking ? 'animate-spin' : ''}
+            />
+            {checking ? '检查中...' : '检查更新'}
+          </button>
+
+          {updateMessage && (
+            <div className={`mt-3 px-4 py-2.5 rounded-lg text-sm text-center ${
+              updateMessage.includes('失败')
+                ? 'bg-red-500/20 text-red-300'
+                : updateMessage.includes('最新版本')
+                  ? 'bg-green-500/20 text-green-300'
+                  : 'bg-purple-500/20 text-purple-300'
+            }`}>
+              {updateMessage}
+            </div>
+          )}
         </div>
       </div>
 

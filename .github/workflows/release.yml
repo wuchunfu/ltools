@@ -79,31 +79,37 @@ jobs:
           npm install --production
           npm prune --production
 
-      - name: Build application
-        run: wails3 build -v
+      - name: Package application
+        run: wails3 package -v
 
-      - name: Package with music service (macOS)
+      - name: Prepare release (macOS)
         if: matrix.goos == 'darwin'
         run: |
-          mkdir -p bin/LTools.app/Contents/Resources
-          cp -r lx-music-service bin/LTools.app/Contents/Resources/
+          # wails3 package creates bin/LTools.app with lx-music-service included
           tar czf ltools-${{ github.ref_name }}-${{ matrix.goos }}-arm64.tar.gz -C bin LTools.app
 
-      - name: Package with music service (Windows)
+      - name: Prepare release (Windows)
         if: matrix.goos == 'windows'
         run: |
-          mkdir release
-          cp bin\ltools.exe release\
-          Copy-Item -Path "lx-music-service" -Destination "release\lx-music-service" -Recurse
-          Compress-Archive -Path release\* -DestinationPath ltools-${{ github.ref_name }}-${{ matrix.goos }}-amd64.zip
+          # wails3 package creates NSIS installer in bin/
+          # The installer already includes lx-music-service
+          Move-Item -Path "bin\ltools-amd64-installer.exe" -Destination "ltools-${{ github.ref_name }}-${{ matrix.goos }}-amd64-installer.exe"
 
-      - name: Package with music service (Linux)
+      - name: Prepare release (Linux)
         if: matrix.goos == 'linux'
         run: |
+          # wails3 package creates AppImage, DEB, RPM in bin/
+          # Copy them to release directory with proper naming
           mkdir -p release
-          cp bin/ltools release/
-          cp -r lx-music-service release/
-          tar czf ltools-${{ github.ref_name }}-${{ matrix.goos }}-amd64.tar.gz -C release .
+          if [ -f bin/ltools-amd64.AppImage ]; then
+            cp bin/ltools-amd64.AppImage ltools-${{ github.ref_name }}-${{ matrix.goos }}-amd64.AppImage
+          fi
+          if [ -f bin/ltools_*_amd64.deb ]; then
+            cp bin/ltools_*_amd64.deb ltools-${{ github.ref_name }}-${{ matrix.goos }}-amd64.deb
+          fi
+          if [ -f bin/ltools-*.x86_64.rpm ]; then
+            cp bin/ltools-*.x86_64.rpm ltools-${{ github.ref_name }}-${{ matrix.goos }}-amd64.rpm
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -112,6 +118,10 @@ jobs:
           path: |
             *.tar.gz
             *.zip
+            *.exe
+            *.AppImage
+            *.deb
+            *.rpm
 
   create-release:
     needs: build
@@ -129,7 +139,7 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release
-          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release/ \;
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "update.json" \) -exec cp {} release/ \;
           ls -lh release/
 
       - name: Generate update manifest
@@ -159,8 +169,10 @@ jobs:
             | 平台 | 文件 | 大小 |
             |------|------|------|
             | macOS (ARM64) | `ltools-${{ github.ref_name }}-darwin-arm64.tar.gz` | ~50 MB |
-            | Windows (x64) | `ltools-${{ github.ref_name }}-windows-amd64.zip` | ~55 MB |
-            | Linux (x64) | `ltools-${{ github.ref_name }}-linux-amd64.tar.gz` | ~52 MB |
+            | Windows (x64) | `ltools-${{ github.ref_name }}-windows-amd64-installer.exe` | ~55 MB |
+            | Linux (x64) | `ltools-${{ github.ref_name }}-linux-amd64.AppImage` | ~52 MB |
+            | Linux (x64) | `ltools-${{ github.ref_name }}-linux-amd64.deb` | ~52 MB |
+            | Linux (x64) | `ltools-${{ github.ref_name }}-linux-amd64.rpm` | ~52 MB |
 
             ### 新功能
 
@@ -198,12 +210,11 @@ jobs:
             # 1. 确保已安装 Node.js >= 16.0.0
             node --version
 
-            # 2. 解压
-            Expand-Archive ltools-${{ github.ref_name }}-windows-amd64.zip -DestinationPath C:\LTools
+            # 2. 下载并运行安装程序
+            # 双击 ltools-${{ github.ref_name }}-windows-amd64-installer.exe
+            # 安装程序会自动包含音乐服务依赖
 
-            # 3. 运行
-            cd C:\LTools
-            .\ltools.exe
+            # 3. 从开始菜单或桌面快捷方式启动
             ```
 
             #### Linux
@@ -211,15 +222,17 @@ jobs:
             # 1. 确保已安装 Node.js >= 16.0.0
             node --version
 
-            # 2. 解压
-            tar xzf ltools-${{ github.ref_name }}-linux-amd64.tar.gz
+            # 方式 A: AppImage (推荐，无需安装)
+            chmod +x ltools-${{ github.ref_name }}-linux-amd64.AppImage
+            ./ltools-${{ github.ref_name }}-linux-amd64.AppImage
 
-            # 3. 安装（可选）
-            chmod +x ltools
-            sudo mv ltools lx-music-service /usr/local/bin/
+            # 方式 B: DEB 包 (Debian/Ubuntu)
+            sudo dpkg -i ltools-${{ github.ref_name }}-linux-amd64.deb
+            ltools
 
-            # 4. 运行
-            ./ltools
+            # 方式 C: RPM 包 (RHEL/CentOS/Fedora)
+            sudo rpm -i ltools-${{ github.ref_name }}-linux-amd64.rpm
+            ltools
             ```
 
             ### 包含的组件
@@ -237,8 +250,15 @@ jobs:
             # 检查 Node.js 版本
             node --version  # 应该 >= v16.0.0
 
-            # 检查服务文件
-            ls -la lx-music-service/
+            # macOS: 音乐服务位于应用包内
+            ls -la /Applications/LTools.app/Contents/Resources/lx-music-service/
+
+            # Windows: 音乐服务位于安装目录
+            ls "C:\Program Files\My Company\LTools\lx-music-service\"
+
+            # Linux: 音乐服务位于
+            ls /usr/local/share/ltools/lx-music-service/  # DEB/RPM
+            # 或 AppImage 内部（自动处理）
             ```
 
             **应用无法启动？**

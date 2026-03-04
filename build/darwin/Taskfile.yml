@@ -144,7 +144,18 @@ tasks:
       - cp build/darwin/icons.icns "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
+      - task: copy:music-service
       - task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'
+
+  copy:music-service:
+    summary: Copies lx-music-service to app bundle
+    internal: true
+    cmds:
+      - echo "Copying lx-music-service to app bundle..."
+      - cp -r lx-music-service "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources/"
+    preconditions:
+      - sh: '[ -d "lx-music-service" ]'
+        msg: "lx-music-service directory not found"
 
   codesign:adhoc:
     summary: Ad-hoc signs the app bundle (macOS only)

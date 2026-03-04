@@ -115,6 +115,7 @@ tasks:
     cmds:
       - cp "{{.APP_BINARY}}" "{{.APP_NAME}}"
       - cp ../../appicon.png "{{.APP_NAME}}.png"
+      - task: copy:music-service
       - wails3 generate appimage -binary "{{.APP_NAME}}" -icon {{.ICON}} -desktopfile {{.DESKTOP_FILE}} -outputdir {{.OUTPUT_DIR}} -builddir {{.ROOT_DIR}}/build/linux/appimage/build
     vars:
       APP_NAME: '{{.APP_NAME}}'
@@ -122,6 +123,17 @@ tasks:
       ICON: '{{.APP_NAME}}.png'
       DESKTOP_FILE: '../{{.APP_NAME}}.desktop'
       OUTPUT_DIR: '../../../bin'
+
+  copy:music-service:
+    summary: Copies lx-music-service to AppImage build directory
+    internal: true
+    dir: build/linux/appimage
+    cmds:
+      - echo "Copying lx-music-service to AppImage directory..."
+      - cp -r "{{.ROOT_DIR}}/lx-music-service" ./lx-music-service
+    preconditions:
+      - sh: '[ -d "{{.ROOT_DIR}}/lx-music-service" ]'
+        msg: "lx-music-service directory not found"
 
   create:deb:
     summary: Creates a deb package

@@ -61,15 +61,34 @@ func NewProcessManager(config *ProcessManagerConfig) (*ProcessManager, error) {
 		}
 
 		// 推算 lx-music-service 目录路径
-		// 假设结构为: <app>/lx-music-service/
 		appDir := filepath.Dir(execPath)
-		config.ServiceDir = filepath.Join(appDir, "lx-music-service")
 
-		// 开发环境：可能在项目根目录
-		if _, err := os.Stat(config.ServiceDir); os.IsNotExist(err) {
-			// 尝试从当前工作目录查找
-			wd, _ := os.Getwd()
-			config.ServiceDir = filepath.Join(wd, "lx-music-service")
+		// 尝试多个可能的位置
+		possiblePaths := []string{
+			// 1. 可执行文件同目录（Windows, Linux AppImage, 开发环境）
+			filepath.Join(appDir, "lx-music-service"),
+
+			// 2. macOS .app bundle: Contents/MacOS/../Resources/
+			filepath.Join(appDir, "..", "Resources", "lx-music-service"),
+
+			// 3. Linux 系统安装: /usr/local/bin -> /usr/local/share/ltools/
+			filepath.Join(appDir, "..", "share", "ltools", "lx-music-service"),
+
+			// 4. 开发环境：项目根目录
+			"lx-music-service",
+		}
+
+		// 查找第一个存在的路径
+		for _, path := range possiblePaths {
+			if _, err := os.Stat(path); err == nil {
+				config.ServiceDir = path
+				break
+			}
+		}
+
+		// 如果都没找到，使用默认路径（会在后面的检查中报错）
+		if config.ServiceDir == "" {
+			config.ServiceDir = possiblePaths[0]
 		}
 	}
 
@@ -78,13 +97,19 @@ func NewProcessManager(config *ProcessManagerConfig) (*ProcessManager, error) {
 		return nil, fmt.Errorf(`lx-music-service directory not found: %s
 
 This directory is required for music player functionality.
-Expected location: next to the application executable or in the project root during development.
+
+Expected locations:
+  • Windows: <install-dir>/lx-music-service/
+  • macOS: LTools.app/Contents/Resources/lx-music-service/
+  • Linux (DEB/RPM): /usr/local/share/ltools/lx-music-service/
+  • Linux (AppImage): <appimage>/lx-music-service/
+  • Development: ./lx-music-service/
 
 If you're a user:
   Please ensure the application was installed correctly with all bundled files.
 
 If you're a developer:
-  Run 'task package:production' to prepare all dependencies before building`, config.ServiceDir)
+  Run 'wails3 package' to create a properly bundled application.`, config.ServiceDir)
 	}
 
 	// 检查 Node.js 是否安装

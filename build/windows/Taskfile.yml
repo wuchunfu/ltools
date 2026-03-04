@@ -115,7 +115,10 @@ tasks:
     cmds:
       # Create the Microsoft WebView2 bootstrapper if it doesn't exist
       - wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
-      - | 
+      # Prepare package directory with music service
+      - task: prepare:package
+      # Build installer
+      - |
         {{if eq OS "windows"}}
         makensis -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" project.nsi
         {{else}}
@@ -124,6 +127,23 @@ tasks:
     vars:
       ARCH: '{{.ARCH | default ARCH}}'
       ARG_FLAG: '{{if eq .ARCH "amd64"}}AMD64{{else}}ARM64{{end}}'
+
+  prepare:package:
+    summary: Prepares package directory with lx-music-service
+    internal: true
+    dir: build/windows/nsis
+    cmds:
+      - echo "Preparing package directory with lx-music-service..."
+      - |-
+        {{if eq OS "windows"}}
+        if exist "{{.ROOT_DIR}}\lx-music-service" (
+          xcopy "{{.ROOT_DIR}}\lx-music-service" "lx-music-service\" /E /I /Y
+        )
+        {{else}}
+        if [ -d "{{.ROOT_DIR}}/lx-music-service" ]; then
+          cp -r "{{.ROOT_DIR}}/lx-music-service" ./
+        fi
+        {{end}}
 
   create:msix:package:
     summary: Creates an MSIX package
