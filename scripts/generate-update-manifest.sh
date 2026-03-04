@@ -85,16 +85,16 @@ PACKAGES_FOUND=0
 
 if check_package "darwin-arm64" "tar.gz"; then PACKAGES_FOUND=$((PACKAGES_FOUND + 1)); fi
 if check_package "darwin-amd64" "tar.gz"; then PACKAGES_FOUND=$((PACKAGES_FOUND + 1)); fi
-if check_package "windows-amd64" "zip"; then PACKAGES_FOUND=$((PACKAGES_FOUND + 1)); fi
-if check_package "linux-amd64" "tar.gz"; then PACKAGES_FOUND=$((PACKAGES_FOUND + 1)); fi
+if check_package "windows-amd64-portable" "zip"; then PACKAGES_FOUND=$((PACKAGES_FOUND + 1)); fi
+if check_package "linux-amd64" "AppImage"; then PACKAGES_FOUND=$((PACKAGES_FOUND + 1)); fi
 
 if [ $PACKAGES_FOUND -eq 0 ]; then
   echo ""
   echo "错误: 未找到任何平台包"
   echo "请先运行构建命令:"
-  echo "  task darwin:build"
-  echo "  task windows:build"
-  echo "  task linux:build"
+  echo "  task darwin:package"
+  echo "  task windows:package"
+  echo "  task linux:package"
   exit 1
 fi
 
@@ -112,7 +112,7 @@ cat > "$OUTPUT_FILE" <<EOF
   "releaseNotes": "## 新功能\n- 自动更新机制\n\n## 改进\n- 性能优化\n\n## 修复\n- Bug 修复",
   "mandatory": false,
   "platforms": {
-$(generate_platform_info "darwin-arm64" "tar.gz")$(generate_platform_info "darwin-amd64" "tar.gz")$(generate_platform_info "windows-amd64" "zip")$(generate_platform_info "linux-amd64" "tar.gz")
+$(generate_platform_info "darwin-arm64" "tar.gz")$(generate_platform_info "darwin-amd64" "tar.gz")$(generate_platform_info "windows-amd64-portable" "zip")$(generate_platform_info "linux-amd64" "AppImage")
   }
 }
 EOF

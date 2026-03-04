@@ -79,28 +79,36 @@ jobs:
           npm install --production
           npm prune --production
 
-      - name: Package application
-        run: wails3 package -v
+      - name: Build and package application
+        run: |
+          # 先构建二进制文件（用于创建便携版）
+          wails3 build -v
+          # 再打包安装程序
+          wails3 package -v
 
       - name: Prepare release (macOS)
         if: matrix.goos == 'darwin'
         run: |
-          # wails3 package creates bin/LTools.app with lx-music-service included
+          # macOS: tar.gz 包含 .app（用于自动更新和手动下载）
           tar czf ltools-${{ github.ref_name }}-${{ matrix.goos }}-arm64.tar.gz -C bin LTools.app
 
       - name: Prepare release (Windows)
         if: matrix.goos == 'windows'
         run: |
-          # wails3 package creates NSIS installer in bin/
-          # The installer already includes lx-music-service
+          # 1. 便携版（自动更新）- 从 build 输出创建
+          New-Item -ItemType Directory -Force -Path portable
+          Copy-Item "bin\ltools.exe" "portable\"
+          Copy-Item -Path "lx-music-service" -Destination "portable\lx-music-service" -Recurse
+          Compress-Archive -Path "portable\*" -DestinationPath "ltools-${{ github.ref_name }}-${{ matrix.goos }}-amd64-portable.zip"
+
+          # 2. 安装版（手动下载）- 从 package 输出
           Move-Item -Path "bin\ltools-amd64-installer.exe" -Destination "ltools-${{ github.ref_name }}-${{ matrix.goos }}-amd64-installer.exe"
 
       - name: Prepare release (Linux)
         if: matrix.goos == 'linux'
         run: |
-          # wails3 package creates AppImage, DEB, RPM in bin/
-          # Copy them to release directory with proper naming
-          mkdir -p release
+          # AppImage 用于自动更新和手动下载
+          # DEB/RPM 仅用于手动下载
           if [ -f bin/ltools-amd64.AppImage ]; then
             cp bin/ltools-amd64.AppImage ltools-${{ github.ref_name }}-${{ matrix.goos }}-amd64.AppImage
           fi
@@ -166,13 +174,14 @@ jobs:
 
             ### 下载地址
 
-            | 平台 | 文件 | 大小 |
-            |------|------|------|
-            | macOS (ARM64) | `ltools-${{ github.ref_name }}-darwin-arm64.tar.gz` | ~50 MB |
-            | Windows (x64) | `ltools-${{ github.ref_name }}-windows-amd64-installer.exe` | ~55 MB |
-            | Linux (x64) | `ltools-${{ github.ref_name }}-linux-amd64.AppImage` | ~52 MB |
-            | Linux (x64) | `ltools-${{ github.ref_name }}-linux-amd64.deb` | ~52 MB |
-            | Linux (x64) | `ltools-${{ github.ref_name }}-linux-amd64.rpm` | ~52 MB |
+            | 平台 | 文件 | 大小 | 说明 |
+            |------|------|------|------|
+            | macOS (ARM64) | `ltools-${{ github.ref_name }}-darwin-arm64.tar.gz` | ~50 MB | .app bundle |
+            | Windows (x64) | `ltools-${{ github.ref_name }}-windows-amd64-installer.exe` | ~55 MB | NSIS 安装程序（推荐）|
+            | Windows (x64) | `ltools-${{ github.ref_name }}-windows-amd64-portable.zip` | ~55 MB | 便携版（自动更新）|
+            | Linux (x64) | `ltools-${{ github.ref_name }}-linux-amd64.AppImage` | ~52 MB | AppImage（推荐）|
+            | Linux (x64) | `ltools-${{ github.ref_name }}-linux-amd64.deb` | ~52 MB | Debian/Ubuntu |
+            | Linux (x64) | `ltools-${{ github.ref_name }}-linux-amd64.rpm` | ~52 MB | RHEL/CentOS/Fedora |
 
             ### 新功能
 
@@ -186,7 +195,14 @@ jobs:
             此版本已配置自动更新：
             - 应用启动 10 秒后自动检查更新
             - 发现新版本时显示友好通知
-            - 支持手动检查（点击右下角刷新按钮）
+            - 支持手动检查（点击右下角刷新按钮或设置 → 关于）
+
+            **更新包格式**：
+            - macOS: `.tar.gz` (包含 .app)
+            - Windows: `-portable.zip` (便携版)
+            - Linux: `.AppImage`
+
+            **注意**：自动更新仅支持便携版格式。如需安装版体验，请手动下载安装程序。
 
             更新清单：[update.json](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/update.json)
 
