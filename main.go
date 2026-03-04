@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"ltools/internal/plugins"
+	"ltools/internal/proxy"
 	"ltools/internal/sync"
 	"ltools/plugins/applauncher"
 	"ltools/plugins/bookmark"
@@ -199,8 +201,18 @@ func init() {
 // registers plugins, and runs the application.
 func main() {
 
-	// Create proxy asset handler for music player
-	proxyHandler := NewProxyAssetHandler(application.AssetFileServerFS(assets))
+	// Create proxy manager for all plugins
+	proxyManager := proxy.NewProxyManager(&proxy.ProxyConfig{
+		RequestTimeout:   30 * time.Second,
+		MaxRetries:       2,
+		EnableCache:      true,
+		CacheTTL:         30 * time.Minute,
+		MaxCacheEntries:  1000,
+		EnableLogging:    true,
+	})
+
+	// Create combined asset handler: proxy first, then static files
+	proxyHandler := NewCombinedAssetHandler(proxyManager, application.AssetFileServerFS(assets))
 
 	// Create a new Wails application by providing the necessary options.
 	// Variables 'Name' and 'Description' are for application metadata.
@@ -504,7 +516,8 @@ func main() {
 	localTranslateService := localtranslate.NewLocalTranslateService(localTranslatePlugin, app)
 
 	// Create musicplayer service to expose music player functionality to frontend
-	musicPlayerServiceLX, err := musicplayer.NewServiceLX(musicPlayerPlugin, app, proxyHandler)
+	musicPlayerProxyAdapter := proxy.NewMusicPlayerAdapter(proxyManager)
+	musicPlayerServiceLX, err := musicplayer.NewServiceLX(musicPlayerPlugin, app, musicPlayerProxyAdapter)
 	if err != nil {
 		log.Fatal("Failed to create musicplayer service:", err)
 	}
