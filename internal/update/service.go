@@ -468,6 +468,92 @@ func (s *Service) promptRestart() error {
 	return nil
 }
 
+// RestartApp 重启应用（前端调用）
+func (s *Service) RestartApp() error {
+	log.Println("[UpdateService] Restarting application...")
+
+	// 获取当前可执行文件路径
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %w", err)
+	}
+
+	log.Printf("[UpdateService] Current executable: %s", execPath)
+
+	// 平台特定的重启逻辑
+	switch runtime.GOOS {
+	case "windows":
+		return s.restartWindows(execPath)
+	case "darwin":
+		return s.restartMacOS(execPath)
+	case "linux":
+		return s.restartLinux(execPath)
+	default:
+		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+	}
+}
+
+// restartMacOS macOS 重启逻辑
+func (s *Service) restartMacOS(execPath string) error {
+	log.Println("[UpdateService] Restarting on macOS...")
+
+	// 如果是 .app bundle，需要启动整个 .app
+	if strings.Contains(execPath, ".app/Contents/MacOS/") {
+		// 查找 .app 根目录
+		appPath := execPath
+		for !strings.HasSuffix(appPath, ".app") {
+			appPath = filepath.Dir(appPath)
+			if appPath == "/" {
+				return fmt.Errorf("failed to find .app bundle")
+			}
+		}
+
+		log.Printf("[UpdateService] Restarting .app bundle: %s", appPath)
+
+		// 使用 open 命令启动 .app
+		cmd := exec.Command("open", appPath)
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("failed to start .app: %w", err)
+		}
+	} else {
+		// 开发环境或独立二进制
+		cmd := exec.Command(execPath)
+		cmd.Env = os.Environ()
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("failed to start executable: %w", err)
+		}
+	}
+
+	log.Println("[UpdateService] New instance started, exiting current...")
+
+	// 退出当前应用
+	os.Exit(0)
+
+	return nil
+}
+
+// restartLinux Linux 重启逻辑
+func (s *Service) restartLinux(execPath string) error {
+	log.Println("[UpdateService] Restarting on Linux...")
+
+	// 启动新实例
+	cmd := exec.Command(execPath)
+	cmd.Env = os.Environ()
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start new instance: %w", err)
+	}
+
+	log.Println("[UpdateService] New instance started, exiting current...")
+
+	// 退出当前应用
+	os.Exit(0)
+
+	return nil
+}
+
 // copyFile 复制文件
 func copyFile(src, dst string) error {
 	sourceFile, err := os.Open(src)
