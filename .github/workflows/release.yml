@@ -19,6 +19,12 @@ jobs:
             archive: tar.gz
           - os: macos-latest
             goos: darwin
+            arch: arm64
+            ext: '.app'
+            archive: tar.gz
+          - os: macos-13
+            goos: darwin
+            arch: amd64
             ext: '.app'
             archive: tar.gz
           - os: windows-latest
@@ -86,7 +92,11 @@ jobs:
         if: matrix.goos == 'darwin'
         run: |
           # macOS: .app bundle (tar.gz)
-          tar czf ltools-${{ github.ref_name }}-${{ matrix.goos }}-arm64.tar.gz -C bin LTools.app
+          ARCH="${{ matrix.arch }}"
+          if [ -z "$ARCH" ]; then
+            ARCH="$(uname -m)"
+          fi
+          tar czf ltools-${{ github.ref_name }}-${{ matrix.goos }}-${ARCH}.tar.gz -C bin LTools.app
 
       - name: Prepare release (Windows)
         if: matrix.goos == 'windows'
@@ -97,16 +107,22 @@ jobs:
       - name: Prepare release (Linux)
         if: matrix.goos == 'linux'
         run: |
+          # 确定架构
+          ARCH="${{ matrix.arch }}"
+          if [ -z "$ARCH" ]; then
+            ARCH="amd64"
+          fi
+
           # Linux: AppImage (用于更新和首次安装)
-          if [ -f bin/ltools-amd64.AppImage ]; then
-            cp bin/ltools-amd64.AppImage ltools-${{ github.ref_name }}-${{ matrix.goos }}-amd64.AppImage
+          if [ -f bin/ltools-${ARCH}.AppImage ]; then
+            cp bin/ltools-${ARCH}.AppImage ltools-${{ github.ref_name }}-${{ matrix.goos }}-${ARCH}.AppImage
           fi
           # DEB/RPM (可选，供手动下载)
-          if [ -f bin/ltools_*_amd64.deb ]; then
-            cp bin/ltools_*_amd64.deb ltools-${{ github.ref_name }}-${{ matrix.goos }}-amd64.deb
+          if [ -f bin/ltools_*_${ARCH}.deb ]; then
+            cp bin/ltools_*_${ARCH}.deb ltools-${{ github.ref_name }}-${{ matrix.goos }}-${ARCH}.deb
           fi
           if [ -f bin/ltools-*.x86_64.rpm ]; then
-            cp bin/ltools-*.x86_64.rpm ltools-${{ github.ref_name }}-${{ matrix.goos }}-amd64.rpm
+            cp bin/ltools-*.x86_64.rpm ltools-${{ github.ref_name }}-${{ matrix.goos }}-${ARCH}.rpm
           fi
 
       - name: Upload artifact
@@ -166,7 +182,8 @@ jobs:
 
             | 平台 | 文件 | 大小 | 说明 |
             |------|------|------|------|
-            | macOS (ARM64) | `ltools-${{ github.ref_name }}-darwin-arm64.tar.gz` | ~50 MB | .app bundle |
+            | macOS (ARM64) | `ltools-${{ github.ref_name }}-darwin-arm64.tar.gz` | ~50 MB | .app bundle (Apple Silicon) |
+            | macOS (AMD64) | `ltools-${{ github.ref_name }}-darwin-amd64.tar.gz` | ~50 MB | .app bundle (Intel Mac) |
             | Windows (x64) | `ltools-${{ github.ref_name }}-windows-amd64-installer.exe` | ~55 MB | NSIS 安装程序 |
             | Linux (x64) | `ltools-${{ github.ref_name }}-linux-amd64.AppImage` | ~52 MB | AppImage（推荐）|
             | Linux (x64) | `ltools-${{ github.ref_name }}-linux-amd64.deb` | ~52 MB | Debian/Ubuntu |
@@ -201,7 +218,11 @@ jobs:
             node --version
 
             # 2. 解压并安装应用
+            # ARM64 (Apple Silicon - M1/M2/M3):
             tar xzf ltools-${{ github.ref_name }}-darwin-arm64.tar.gz
+            # 或 AMD64 (Intel Mac):
+            # tar xzf ltools-${{ github.ref_name }}-darwin-amd64.tar.gz
+
             mv LTools.app /Applications/
 
             # 3. 启动应用
