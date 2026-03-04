@@ -1,17 +1,21 @@
 {
   "version": "v0.1.0",
-  "releaseDate": "2026-03-04T18:38:36Z",
+  "releaseDate": "2026-03-04T19:19:50Z",
   "releaseNotes": "## 新功能\n- 自动更新机制\n\n## 改进\n- 性能优化\n\n## 修复\n- Bug 修复",
   "mandatory": false,
   "platforms": {
     "darwin-arm64": {
       "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.0/ltools-v0.1.0-darwin-arm64.tar.gz",
-      "size": 10846987,
-      "checksum": "sha256:2f34172dd44656d4a1155d14e7eea2af2dd9f28a4b764e35f901f2c5e6f91dbe"
+      "size": 10847116,
+      "checksum": "sha256:ff0f0dc82561b1d882f6c4a39f2b444ba29b66582d25effaf0a43a96f1d82db9"
     }    "windows-amd64-installer": {
       "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.0/ltools-v0.1.0-windows-amd64-installer.exe",
-      "size": 12325884,
-      "checksum": "sha256:7c9a21ae076b57c3d017a5ba90c14a9c5700800b189113bf5c04835e5eddd0eb"
+      "size": 12325885,
+      "checksum": "sha256:f3cef4c4def53a31b15dc4bdee5956b4f2c1c2a37fb0efd9a5db0426a9b529f2"
+    }    "linux-amd64": {
+      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.0/ltools-v0.1.0-linux-amd64.AppImage",
+      "size": 78977528,
+      "checksum": "sha256:16d938d3b68c4258f993ecad2b5c9a722a8535e0ebbff6e70131ff30117cd76f"
     }
   }
 }
