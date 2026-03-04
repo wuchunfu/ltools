@@ -106,6 +106,17 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'lx-music-service/package-lock.json'
 
+      - name: Cache Linux apt packages
+        if: matrix.goos == 'linux'
+        id: cache-linux-apt
+        uses: actions/cache@v4
+        with:
+          path: |
+            /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-${{ hashFiles('.github/workflows/release.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-
+
       - name: Install Linux dependencies
         if: matrix.goos == 'linux'
         run: |
@@ -367,14 +378,18 @@ jobs:
 
       - name: Update latest manifest
         run: |
-          # 将 update.json 复制到仓库根目录，作为 latest 版本
-          cp release/update.json update.json
-
           # 配置 git
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # 提交并推送到 main 分支
+          # 切换到 main 分支
+          git fetch origin main
+          git checkout main
+
+          # 将 update.json 复制到仓库根目录，作为 latest 版本
+          cp release/update.json update.json
+
+          # 提交并推送
           git add update.json
           git commit -m "chore: update manifest for ${{ github.ref_name }}" || echo "No changes to commit"
           git push origin main
