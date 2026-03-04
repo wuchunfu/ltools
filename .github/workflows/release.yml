@@ -166,15 +166,7 @@ jobs:
         run: go clean -cache
 
       - name: Build and package application
-        run: |
-          wails3 package
-
-          # 调试：检查构建输出
-          echo "=== Build output check ==="
-          if [ "${{ matrix.goos }}" = "linux" ]; then
-            echo "Linux build artifacts:"
-            ls -lah bin/ || echo "bin directory not found"
-          fi
+        run: wails3 package
 
       - name: Prepare release (macOS)
         if: matrix.goos == 'darwin'
