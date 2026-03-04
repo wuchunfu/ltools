@@ -1,16 +1,20 @@
 //go:build windows
+
 package clipboard
 import (
-	"ltools/internal/plugins/clipboard"
+	"fmt"
 )
-// ImageClipboard is a stub implementation for Windows
-// It provides a cross-platform image clipboard operations
-type ImageClipboard struct {
-	clipboard *clipboardpkg.ImageClipboard
+
+// SetImage sets an image to the clipboard from RGBA format
+func (c *ImageClipboard) SetImage(img *image.RGBA) error {
+	if img == nil {
+		return &InvalidImageError{}
+    }
+    // Windows clipboard is not supported for this plugin
+    return fmt.Errorf("clipboard image operations not supported on Windows")
 }
 
-// NewImageClipboard creates a new clipboard instance
-func NewImageClipboard() *ImageClipboard {
-	return &ImageClipboard{clipboard: clipboardpkg.ImageClipboard}
+// GetImage gets an image from the clipboard
+func (c *ImageClipboard) GetImage() ([]byte, error) {
+	return nil, fmt.Errorf("clipboard image operations not supported on Windows")
 }
-
