@@ -217,6 +217,16 @@ func (pm *ProxyManager) UnregisterPlugin(pluginName string) {
 func (pm *ProxyManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
+	// 处理 OPTIONS 预检请求
+	if r.Method == "OPTIONS" {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Range, Content-Type, Accept")
+		w.Header().Set("Access-Control-Max-Age", "86400") // 24 小时
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	// 检查是否是代理请求
 	for _, prefix := range []string{"/proxy/audio/", "/proxy/image/", "/proxy/video/", "/proxy/file/"} {
 		if strings.HasPrefix(path, prefix) {
@@ -413,7 +423,8 @@ func (pm *ProxyManager) serveResponse(w http.ResponseWriter, r *http.Request, re
 	// 添加 CORS 头
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Range")
+	w.Header().Set("Access-Control-Allow-Headers", "Range, Content-Type, Accept, Content-Length")
+	w.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Content-Type, Accept-Ranges")
 
 	// 写入响应状态码
 	w.WriteHeader(resp.StatusCode)
@@ -452,7 +463,8 @@ func (pm *ProxyManager) serveFromCache(w http.ResponseWriter, r *http.Request, c
 	// 添加 CORS 头
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Range")
+	w.Header().Set("Access-Control-Allow-Headers", "Range, Content-Type, Accept, Content-Length")
+	w.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Content-Type, Accept-Ranges")
 	w.Header().Set("X-Cache", "HIT")
 
 	w.WriteHeader(http.StatusOK)
