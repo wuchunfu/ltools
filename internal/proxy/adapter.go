@@ -25,3 +25,8 @@ func (a *MusicPlayerAdapter) RegisterAudioURL(resourceID, remoteURL string) stri
 func (a *MusicPlayerAdapter) RegisterImageURL(resourceID, remoteURL string) string {
 	return a.manager.RegisterImage(a.pluginName, resourceID, remoteURL)
 }
+
+// GetAudioURL 获取音频的真实 URL（实现 musicplayer.ProxyHandler 接口）
+func (a *MusicPlayerAdapter) GetAudioURL(resourceID string) string {
+	return a.manager.GetAudioURL(a.pluginName, resourceID)
+}

@@ -3,8 +3,12 @@ package musicplayer
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
+	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -573,6 +577,64 @@ func (s *ServiceLX) Close() error {
 	return nil
 }
 
+// DownloadSong 下载歌曲到指定路径（暴露给前端）
+func (s *ServiceLX) DownloadSong(song Song, savePath string) error {
+	if !s.initialized {
+		return fmt.Errorf("service not initialized")
+	}
+
+	// 1. 获取音频 URL
+	audioURL, err := s.GetSongURLWithMetadata(&song, "320k")
+	if err != nil {
+		return fmt.Errorf("failed to get audio URL: %w", err)
+	}
+
+	// 2. 如果是代理 URL，获取真实 URL
+	if strings.Contains(audioURL, "/proxy/audio/") {
+		if s.proxyHandler != nil {
+			parts := strings.Split(audioURL, "/")
+			if len(parts) > 0 {
+				songID := parts[len(parts)-1]
+				realURL := s.proxyHandler.GetAudioURL(songID)
+				if realURL != "" {
+					audioURL = realURL
+				}
+			}
+		}
+	}
+
+	// 3. 下载文件
+	resp, err := http.Get(audioURL)
+	if err != nil {
+		return fmt.Errorf("failed to download: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed with status: %d", resp.StatusCode)
+	}
+
+	// 4. 智能识别格式
+	audioFormat := detectAudioFormat(audioURL, resp.Header.Get("Content-Type"))
+	actualPath := ensureCorrectExtension(savePath, audioFormat)
+
+	// 5. 创建文件
+	outFile, err := os.Create(actualPath)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer outFile.Close()
+
+	// 6. 写入文件
+	_, err = io.Copy(outFile, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to save file: %w", err)
+	}
+
+	log.Printf("[ServiceLX] Downloaded song: %s -> %s", song.Name, actualPath)
+	return nil
+}
+
 // ===== 辅助函数 =====
 
 // ensureHTTPS 确保 URL 使用 HTTPS
@@ -601,4 +663,43 @@ func extractFormat(url string) string {
 	}
 
 	return "unknown"
+}
+
+// detectAudioFormat 检测音频格式
+func detectAudioFormat(url string, contentType string) string {
+	// 优先从 Content-Type 判断
+	contentType = strings.ToLower(contentType)
+	switch {
+	case strings.Contains(contentType, "flac"):
+		return "flac"
+	case strings.Contains(contentType, "mpeg") || strings.Contains(contentType, "mp3"):
+		return "mp3"
+	case strings.Contains(contentType, "aac"):
+		return "aac"
+	case strings.Contains(contentType, "mp4") || strings.Contains(contentType, "m4a"):
+		return "m4a"
+	}
+
+	// 从 URL 判断
+	urlLower := strings.ToLower(url)
+	for _, ext := range []string{".flac", ".mp3", ".aac", ".m4a", ".ogg"} {
+		if strings.Contains(urlLower, ext) {
+			return strings.TrimPrefix(ext, ".")
+		}
+	}
+
+	return "mp3"
+}
+
+// ensureCorrectExtension 确保文件扩展名正确
+func ensureCorrectExtension(path string, format string) string {
+	ext := filepath.Ext(path)
+	correctExt := "." + format
+
+	if ext != correctExt {
+		// 移除旧扩展名，添加正确的
+		base := strings.TrimSuffix(path, ext)
+		return base + correctExt
+	}
+	return path
 }

@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import * as MusicPlayerService from '../../bindings/ltools/plugins/musicplayer/servicelx';
 import { Song } from '../../bindings/ltools/plugins/musicplayer/models';
 import { Icon } from '../components/Icon';
+import { Dialogs } from '@wailsio/runtime';
+import { useToast } from '../hooks/useToast';
 
 export function MusicPlayerWidget() {
     const [songs, setSongs] = useState<Song[]>([]);
@@ -28,6 +30,12 @@ export function MusicPlayerWidget() {
     const [searchPage, setSearchPage] = useState(1); // 当前搜索页码
     const [hasMoreResults, setHasMoreResults] = useState(true); // 是否还有更多结果
     const [isLoadingMore, setIsLoadingMore] = useState(false); // 是否正在加载更多
+
+    // 下载状态
+    const [isDownloading, setIsDownloading] = useState(false); // 当前歌曲下载状态
+    const [downloadingSongs, setDownloadingSongs] = useState<Set<string>>(new Set()); // 搜索列表下载状态
+
+    const toast = useToast();
 
     const lastProgressRef = useRef<number>(0); // 上一次的播放进度（用于检测跳跃）
     const latestProgressRef = useRef<number>(0); // 最新的播放进度
@@ -645,6 +653,88 @@ export function MusicPlayerWidget() {
         }
     };
 
+    // 下载当前歌曲
+    const handleDownloadCurrentSong = async () => {
+        if (!currentSong) return;
+
+        try {
+            setIsDownloading(true);
+
+            // 1. 打开保存对话框
+            const savePath = await Dialogs.SaveFile({
+                Title: `保存音乐 - ${currentSong.name}`,
+                Filename: `${currentSong.name}.mp3`,
+                Filters: [
+                    { DisplayName: '音频文件', Pattern: '*.mp3;*.flac;*.aac;*.m4a' },
+                    { DisplayName: 'MP3 音频', Pattern: '*.mp3' },
+                    { DisplayName: 'FLAC 无损', Pattern: '*.flac' },
+                    { DisplayName: '所有文件', Pattern: '*.*' }
+                ]
+            });
+
+            if (!savePath) return; // 用户取消
+
+            // 2. 调用后端下载
+            await MusicPlayerService.DownloadSong(currentSong, savePath);
+
+            // 3. 显示成功提示
+            toast.success(`下载完成：${currentSong.name}`);
+
+        } catch (error: any) {
+            console.error('Download failed:', error);
+            toast.error(`下载失败：${error?.message || '未知错误'}`);
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
+    // 下载搜索列表中的歌曲
+    const handleDownloadSearchSong = async (song: Song) => {
+        try {
+            // 添加到下载中集合
+            setDownloadingSongs(prev => new Set(prev).add(song.id));
+
+            // 1. 打开保存对话框
+            const savePath = await Dialogs.SaveFile({
+                Title: `保存音乐 - ${song.name}`,
+                Filename: `${song.name}.mp3`,
+                Filters: [
+                    { DisplayName: '音频文件', Pattern: '*.mp3;*.flac;*.aac;*.m4a' },
+                    { DisplayName: 'MP3 音频', Pattern: '*.mp3' },
+                    { DisplayName: 'FLAC 无损', Pattern: '*.flac' },
+                    { DisplayName: '所有文件', Pattern: '*.*' }
+                ]
+            });
+
+            if (!savePath) {
+                // 用户取消，从下载中集合移除
+                setDownloadingSongs(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(song.id);
+                    return newSet;
+                });
+                return;
+            }
+
+            // 2. 调用后端下载
+            await MusicPlayerService.DownloadSong(song, savePath);
+
+            // 3. 显示成功提示
+            toast.success(`下载完成：${song.name}`);
+
+        } catch (error: any) {
+            console.error('Download failed:', error);
+            toast.error(`下载失败：${error?.message || '未知错误'}`);
+        } finally {
+            // 从下载中集合移除
+            setDownloadingSongs(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(song.id);
+                return newSet;
+            });
+        }
+    };
+
     // 播放结束自动下一曲
     const handleEnded = () => {
         playNext();
@@ -747,12 +837,10 @@ export function MusicPlayerWidget() {
                     </div>
 
                     {/* 歌曲信息 */}
-                    {currentSong && (
-                        <div className="vinyl-info">
-                            <h3 className="vinyl-title">{currentSong.name}</h3>
-                            <p className="vinyl-artist">{currentSong.artist.join(', ')}</p>
-                        </div>
-                    )}
+                    <div className="vinyl-info">
+                        <h3 className="vinyl-title">{currentSong ? currentSong.name : '暂未播放'}</h3>
+                        <p className="vinyl-artist">{currentSong ? currentSong.artist.join(', ') : '—'}</p>
+                    </div>
 
                     {/* 进度条 */}
                     <div className="vinyl-progress-container">
@@ -823,6 +911,20 @@ export function MusicPlayerWidget() {
                         >
                             <Icon name={showSearch ? 'x' : 'search'} size={20} />
                         </button>
+
+                        {/* 下载当前歌曲按钮 */}
+                        <button
+                            onClick={handleDownloadCurrentSong}
+                            className="vinyl-btn vinyl-btn-secondary"
+                            title="下载当前歌曲"
+                            disabled={isDownloading || !currentSong}
+                        >
+                            {isDownloading ? (
+                                <Icon name="refresh-cw" size={20} className="animate-spin" />
+                            ) : (
+                                <Icon name="download" size={20} />
+                            )}
+                        </button>
                     </div>
                 </div>
 
@@ -858,27 +960,47 @@ export function MusicPlayerWidget() {
                                         return (
                                             <div
                                                 key={`${song.id}-${index}`}
-                                                onClick={() => {
-                                                    playSong(song);
-                                                    setShowSearch(false);
-                                                }}
                                                 className="vinyl-search-item"
                                             >
-                                                {coverUrl ? (
-                                                    <img
-                                                        src={coverUrl}
-                                                        alt={song.name}
-                                                        className="vinyl-search-cover"
-                                                    />
-                                                ) : (
-                                                    <div className="vinyl-search-cover-placeholder">
-                                                        <Icon name="sparkles" size={20} />
+                                                <div
+                                                    className="vinyl-search-item-main"
+                                                    onClick={() => {
+                                                        playSong(song);
+                                                        setShowSearch(false);
+                                                    }}
+                                                >
+                                                    {coverUrl ? (
+                                                        <img
+                                                            src={coverUrl}
+                                                            alt={song.name}
+                                                            className="vinyl-search-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="vinyl-search-cover-placeholder">
+                                                            <Icon name="sparkles" size={20} />
+                                                        </div>
+                                                    )}
+                                                    <div className="vinyl-search-info">
+                                                        <div className="vinyl-search-title">{song.name}</div>
+                                                        <div className="vinyl-search-artist">{song.artist.join(', ')}</div>
                                                     </div>
-                                                )}
-                                                <div className="vinyl-search-info">
-                                                    <div className="vinyl-search-title">{song.name}</div>
-                                                    <div className="vinyl-search-artist">{song.artist.join(', ')}</div>
                                                 </div>
+                                                {/* 下载按钮 */}
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDownloadSearchSong(song);
+                                                    }}
+                                                    className="vinyl-search-download-btn"
+                                                    title="下载此歌曲"
+                                                    disabled={downloadingSongs.has(song.id)}
+                                                >
+                                                    {downloadingSongs.has(song.id) ? (
+                                                        <Icon name="refresh-cw" size={16} className="animate-spin" />
+                                                    ) : (
+                                                        <Icon name="download" size={16} />
+                                                    )}
+                                                </button>
                                             </div>
                                         );
                                     })}
@@ -1182,6 +1304,7 @@ export function MusicPlayerWidget() {
                 .vinyl-info {
                     text-align: center;
                     max-width: 320px;
+                    min-height: 76px;
                     animation: vinyl-fade-in 0.5s ease-out;
                 }
 
@@ -1201,6 +1324,10 @@ export function MusicPlayerWidget() {
                     margin: 0 0 8px 0;
                     text-shadow: 0 0 20px rgba(255, 0, 128, 0.5);
                     letter-spacing: 0.5px;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    max-width: 100%;
                 }
 
                 .vinyl-artist {
@@ -1210,6 +1337,10 @@ export function MusicPlayerWidget() {
                     margin: 0;
                     font-weight: 500;
                     letter-spacing: 0.5px;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    max-width: 100%;
                 }
 
                 /* 进度条 */
@@ -1490,7 +1621,6 @@ export function MusicPlayerWidget() {
                     gap: 12px;
                     padding: 12px;
                     border-radius: 12px;
-                    cursor: pointer;
                     transition: all 0.2s;
                     margin-bottom: 8px;
                     background: rgba(255, 255, 255, 0.03);
@@ -1498,6 +1628,15 @@ export function MusicPlayerWidget() {
                     width: 100%;
                     box-sizing: border-box;
                     flex-shrink: 0;
+                    align-items: center;
+                }
+
+                .vinyl-search-item-main {
+                    display: flex;
+                    gap: 12px;
+                    flex: 1;
+                    cursor: pointer;
+                    min-width: 0;
                 }
 
                 .vinyl-search-item:hover {
@@ -1505,6 +1644,36 @@ export function MusicPlayerWidget() {
                     border-color: rgba(0, 255, 255, 0.3);
                     transform: translateX(4px);
                     box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+                }
+
+                .vinyl-search-download-btn {
+                    flex-shrink: 0;
+                    width: 32px;
+                    height: 32px;
+                    border: none;
+                    background: rgba(0, 255, 255, 0.1);
+                    border-radius: 8px;
+                    color: rgba(0, 255, 255, 0.8);
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    transition: all 0.2s;
+                }
+
+                .vinyl-search-download-btn:hover {
+                    background: rgba(0, 255, 255, 0.2);
+                    color: #00ffff;
+                    transform: scale(1.1);
+                }
+
+                .vinyl-search-download-btn:disabled {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                }
+
+                .vinyl-search-download-btn .animate-spin {
+                    animation: spin 1s linear infinite;
                 }
 
                 .vinyl-search-cover {
@@ -1585,6 +1754,16 @@ export function MusicPlayerWidget() {
                     font-size: 13px;
                     width: 100%;
                     flex-shrink: 0;
+                }
+
+                /* 旋转动画 */
+                @keyframes spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+
+                .animate-spin {
+                    animation: spin 1s linear infinite;
                 }
             `}</style>
         </>

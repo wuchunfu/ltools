@@ -173,6 +173,20 @@ func (pm *ProxyManager) RegisterFile(pluginName, resourceID, remoteURL string) s
 	return pm.RegisterResource(ResourceTypeFile, pluginName, resourceID, remoteURL)
 }
 
+// GetResourceURL 获取资源的远程 URL
+func (pm *ProxyManager) GetResourceURL(resourceType ResourceType, pluginName, resourceID string) string {
+	pm.mutex.RLock()
+	defer pm.mutex.RUnlock()
+
+	fullID := pm.generateResourceID(resourceType, pluginName, resourceID)
+	return pm.urlMapping[fullID]
+}
+
+// GetAudioURL 获取音频资源的远程 URL（便捷方法）
+func (pm *ProxyManager) GetAudioURL(pluginName, resourceID string) string {
+	return pm.GetResourceURL(ResourceTypeAudio, pluginName, resourceID)
+}
+
 // UnregisterResource 注销资源
 func (pm *ProxyManager) UnregisterResource(resourceType ResourceType, pluginName, resourceID string) {
 	pm.mutex.Lock()

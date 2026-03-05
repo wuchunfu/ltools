@@ -14,4 +14,9 @@ type ProxyHandler interface {
 	// remoteURL: 远程图片 URL
 	// 返回: 代理 URL（如 /proxy/image/<hash>）
 	RegisterImageURL(resourceID, remoteURL string) string
+
+	// GetAudioURL 获取音频的真实 URL
+	// resourceID: 资源唯一标识
+	// 返回: 远程音频 URL（如果不存在则返回空字符串）
+	GetAudioURL(resourceID string) string
 }
