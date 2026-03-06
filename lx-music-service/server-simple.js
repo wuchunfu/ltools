@@ -20,6 +20,7 @@ class SimpleMusicServer {
     this.requestHandlers = {
       search: this.handleSearch.bind(this),
       getMusicUrl: this.handleGetMusicUrl.bind(this),
+      getMusicUrlBatch: this.handleGetMusicUrlBatch.bind(this),
       getLyric: this.handleGetLyric.bind(this),
       getPic: this.handleGetPic.bind(this),
       health: this.handleHealth.bind(this),
@@ -140,6 +141,70 @@ class SimpleMusicServer {
     }
 
     return await this.mfAdapter.getMusicUrl(source, musicInfo, quality);
+  }
+
+  /**
+   * 批量获取播放 URL（多源聚合）
+   */
+  async handleGetMusicUrlBatch(params) {
+    const { songName, singer, songId, duration, sources = ['kw', 'kg', 'tx'], quality = '320k' } = params;
+
+    if (!songName || !singer) {
+      throw new Error('songName and singer are required');
+    }
+
+    console.error(`[MusicServer] Batch getting music URL: song="${songName}", singer="${singer}", sources=${sources.join(',')}`);
+
+    const urls = [];
+
+    // 并发请求多个源
+    const promises = sources.map(async (source) => {
+      try {
+        // 先搜索歌曲获取完整的 musicInfo
+        const searchResult = await this.mfAdapter.search(source, `${songName} ${singer}`, 1, 5);
+
+        if (!searchResult.songs || searchResult.songs.length === 0) {
+          console.error(`[MusicServer] Source ${source}: No search results`);
+          return null;
+        }
+
+        // 查找匹配的歌曲（优先匹配 songId，否则选择第一个结果）
+        let matchedSong = searchResult.songs[0];
+        if (songId) {
+          const found = searchResult.songs.find(s => s.id === songId);
+          if (found) matchedSong = found;
+        }
+
+        console.error(`[MusicServer] Source ${source}: Found song "${matchedSong.name}" (ID: ${matchedSong.id})`);
+
+        // 使用完整的音乐信息获取 URL
+        const result = await this.mfAdapter.getMusicUrl(source, matchedSong, quality);
+
+        if (result && result.url) {
+          return {
+            url: result.url,
+            source,
+            quality,
+            priority: 1,
+          };
+        }
+      } catch (err) {
+        console.error(`[MusicServer] Source ${source} failed: ${err.message}`);
+      }
+      return null;
+    });
+
+    const results = await Promise.all(promises);
+    results.forEach((item) => {
+      if (item) {
+        urls.push(item);
+      }
+    });
+
+    // 按优先级排序
+    urls.sort((a, b) => a.priority - b.priority);
+
+    return { urls };
   }
 
   /**

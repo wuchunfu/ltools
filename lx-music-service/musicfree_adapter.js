@@ -23,13 +23,50 @@ class MusicFreeAdapter {
 
   /**
    * 加载 MusicFree 插件
+   *
+   * 使用沙箱方式加载，注入必要的模块（axios, he, crypto, qs, cheerio）
+   * 因为这些模块被打包进了 bundle，不在 node_modules 中
    */
   async loadPlugin(scriptPath) {
     try {
       const absolutePath = path.resolve(scriptPath);
 
-      // 加载插件模块
-      const plugin = require(absolutePath);
+      // 读取插件文件内容
+      const scriptContent = fs.readFileSync(absolutePath, 'utf8');
+
+      // 创建模块导出对象
+      const moduleExports = {};
+      const moduleObj = { exports: moduleExports };
+
+      // 注入常用模块
+      const sandboxRequire = (moduleName) => {
+        const availableModules = {
+          axios: () => require('axios'),
+          he: () => require('he'),
+          crypto: () => require('crypto'),
+          qs: () => require('qs'),
+          cheerio: () => require('cheerio'),
+        };
+
+        if (availableModules[moduleName]) {
+          return availableModules[moduleName]();
+        }
+
+        // 对于其他模块，尝试使用真实的 require
+        try {
+          return require(moduleName);
+        } catch (err) {
+          console.error(`[MusicFreeAdapter] Module not available: ${moduleName}`);
+          throw new Error(`Cannot find module '${moduleName}' in sandbox`);
+        }
+      };
+
+      // 使用 Function 构造器创建沙箱环境执行插件
+      const scriptFunc = new Function('module', 'exports', 'require', scriptContent);
+      scriptFunc(moduleObj, moduleExports, sandboxRequire);
+
+      // 获取插件对象
+      const plugin = moduleObj.exports || moduleExports;
 
       if (!plugin || !plugin.platform) {
         throw new Error('Invalid MusicFree plugin format');

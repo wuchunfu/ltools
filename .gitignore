@@ -4,6 +4,8 @@ logs
 frontend/dist
 frontend/node_modules
 lx-music-service/node_modules
+lx-music-service/dist
+plugins/musicplayer/lx-music-service/
 build/linux/appimage/build
 build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 *.log

@@ -57,28 +57,6 @@ calculate_checksum() {
   fi
 }
 
-# 生成平台信息
-generate_platform_info() {
-  local platform=$1
-  local ext=$2
-  local file="$UPDATE_DIR/ltools-$VERSION-$platform.$ext"
-
-  if [ ! -f "$file" ]; then
-    return
-  fi
-
-  local size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
-  local checksum=$(calculate_checksum "$file")
-
-  cat <<EOF
-    "$platform": {
-      "url": "$BASE_URL/ltools-$VERSION-$platform.$ext",
-      "size": $size,
-      "checksum": "sha256:$checksum"
-    }
-EOF
-}
-
 # 检查所有平台包
 echo "检查平台包..."
 PACKAGES_FOUND=0
@@ -102,23 +80,63 @@ echo ""
 echo "找到 $PACKAGES_FOUND 个平台包"
 echo ""
 
-# 生成 update.json
+# 收集所有平台信息
+PLATFORM_INFOS=()
+
+check_and_add_platform() {
+  local platform=$1
+  local ext=$2
+  local file="$UPDATE_DIR/ltools-$VERSION-$platform.$ext"
+
+  if [ -f "$file" ]; then
+    local size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
+    local checksum=$(calculate_checksum "$file")
+
+    # 从平台标识中移除 "-installer" 后缀（Windows 特殊处理）
+    # 这样 "windows-amd64-installer" 会映射到 "windows-amd64" 平台键
+    local platform_key="${platform%-installer}"
+
+    # 单行格式，稍后会被逗号分隔
+    PLATFORM_INFOS+=("    \"$platform_key\": {\"url\": \"$BASE_URL/ltools-$VERSION-$platform.$ext\", \"size\": $size, \"checksum\": \"sha256:$checksum\"}")
+  fi
+}
+
+check_and_add_platform "darwin-arm64" "tar.gz"
+check_and_add_platform "darwin-amd64" "tar.gz"
+check_and_add_platform "windows-amd64-installer" "exe"
+check_and_add_platform "linux-amd64" "AppImage"
+
+# 生成 update.json，用逗号连接平台信息
 OUTPUT_FILE="$UPDATE_DIR/update.json"
+
+# 移除版本号前缀的 'v'（如果有）
+CLEAN_VERSION="${VERSION#v}"
+
+# 生成 platforms 部分，用逗号和换行符连接
+PLATFORMS_JSON=""
+for i in "${!PLATFORM_INFOS[@]}"; do
+  if [ $i -gt 0 ]; then
+    PLATFORMS_JSON+=",\n"
+  fi
+  PLATFORMS_JSON+="${PLATFORM_INFOS[$i]}"
+done
 
 cat > "$OUTPUT_FILE" <<EOF
 {
-  "version": "$VERSION",
+  "version": "$CLEAN_VERSION",
   "releaseDate": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
   "releaseNotes": "## 新功能\n- 自动更新机制\n\n## 改进\n- 性能优化\n\n## 修复\n- Bug 修复",
   "mandatory": false,
   "platforms": {
-$(generate_platform_info "darwin-arm64" "tar.gz")$(generate_platform_info "darwin-amd64" "tar.gz")$(generate_platform_info "windows-amd64-installer" "exe")$(generate_platform_info "linux-amd64" "AppImage")
+$(echo -e "$PLATFORMS_JSON")
   }
 }
 EOF
 
-# 移除多余的逗号（JSON 格式化）
-sed -i '' 's/},$/}/g' "$OUTPUT_FILE" 2>/dev/null || sed -i 's/},$/}/g' "$OUTPUT_FILE"
+# 如果安装了 jq，美化 JSON
+if command -v jq &> /dev/null; then
+  jq '.' "$OUTPUT_FILE" > "$OUTPUT_FILE.tmp" && mv "$OUTPUT_FILE.tmp" "$OUTPUT_FILE"
+fi
 
 echo "================================"
 echo "✓ 生成成功"

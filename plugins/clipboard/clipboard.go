@@ -8,22 +8,40 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
 	"ltools/internal/plugins"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 var debugLog *os.File
+var debugLogger *log.Logger
 
 func init() {
-	// Initialize debug log file in project directory
-	f, err := os.OpenFile("/Users/yanglian/code/ltools/clipboard-debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	// Initialize debug log file in user's config directory
+	// Use ~/.config/ltools/logs (macOS: ~/Library/Application Support/ltools/logs)
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		fmt.Println("[Clipboard Plugin] Failed to get user config dir:", err)
+		return
+	}
+
+	logsDir := filepath.Join(configDir, "ltools", "logs")
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		fmt.Println("[Clipboard Plugin] Failed to create logs directory:", err)
+		return
+	}
+
+	logFilePath := filepath.Join(logsDir, "clipboard-debug.log")
+	f, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err == nil {
 		debugLog = f
-		log.SetOutput(f)
-		fmt.Println("[Clipboard Plugin] Debug log initialized: /Users/yanglian/code/ltools/clipboard-debug.log")
+		// Create a separate logger for clipboard instead of modifying global log
+		debugLogger = log.New(f, "", log.LstdFlags)
+		fmt.Println("[Clipboard Plugin] Debug log initialized:", logFilePath)
 		debugWrite("Debug log initialized")
 	} else {
 		fmt.Println("[Clipboard Plugin] Failed to initialize debug log:", err)
@@ -32,10 +50,8 @@ func init() {
 
 // debugWrite writes a message to the debug log file
 func debugWrite(format string, args ...interface{}) {
-	if debugLog != nil {
-		timestamp := time.Now().Format("2006-01-02 15:04:05")
-		msg := fmt.Sprintf("[%s] %s\n", timestamp, fmt.Sprintf(format, args...))
-		debugLog.WriteString(msg)
+	if debugLogger != nil {
+		debugLogger.Printf(format, args...)
 	}
 }
 
@@ -55,10 +71,10 @@ type ClipboardItem struct {
 // ClipboardPlugin provides clipboard management functionality
 type ClipboardPlugin struct {
 	*plugins.BasePlugin
-	app           *application.App
-	history       []ClipboardItem
-	maxHistory    int
-	lastClipboard string         // Track last clipboard content to detect changes
+	app            *application.App
+	history        []ClipboardItem
+	maxHistory     int
+	lastClipboard  string        // Track last clipboard content to detect changes
 	stopMonitoring chan struct{} // Channel to stop monitoring
 }
 
@@ -81,10 +97,10 @@ func NewClipboardPlugin() *ClipboardPlugin {
 
 	base := plugins.NewBasePlugin(metadata)
 	return &ClipboardPlugin{
-		BasePlugin:      base,
-		history:         make([]ClipboardItem, 0),
-		maxHistory:      100, // Keep last 100 items
-		stopMonitoring:  make(chan struct{}),
+		BasePlugin:     base,
+		history:        make([]ClipboardItem, 0),
+		maxHistory:     100, // Keep last 100 items
+		stopMonitoring: make(chan struct{}),
 	}
 }
 
@@ -161,8 +177,8 @@ func (p *ClipboardPlugin) monitorClipboard() {
 			shouldMonitor := enabled || metadataState == stateEnabled
 
 			// Debug logging
-			log.Printf("[Clipboard Plugin] Debug: enabled=%v, state=%q, stateEnabled=%q, shouldMonitor=%v\n",
-				enabled, metadataState, stateEnabled, shouldMonitor)
+			// log.Printf("[Clipboard Plugin] Debug: enabled=%v, state=%q, stateEnabled=%q, shouldMonitor=%v\n",
+			// 	enabled, metadataState, stateEnabled, shouldMonitor)
 
 			if shouldMonitor {
 				// Check for image first
@@ -371,9 +387,9 @@ func (p *ClipboardPlugin) DeleteItem(index int) error {
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) &&
 		(s == substr ||
-		 len(s) > len(substr) && (s[0:len(substr)] == substr ||
-			s[len(s)-len(substr):] == substr ||
-			containsMiddle(s, substr)))
+			len(s) > len(substr) && (s[0:len(substr)] == substr ||
+				s[len(s)-len(substr):] == substr ||
+				containsMiddle(s, substr)))
 }
 
 func containsMiddle(s, substr string) bool {

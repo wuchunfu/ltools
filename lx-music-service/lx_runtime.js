@@ -158,8 +158,41 @@ class LXRuntime {
       console.error(`[LXRuntime] Loading script: ${metadata.name || scriptPath}`);
 
       // 沙箱化执行脚本
-      const scriptFunc = new Function('lx', scriptContent);
-      scriptFunc(globalThis.lx);
+      // 为 CommonJS 兼容性创建 module 和 exports 对象
+      const moduleExports = {};
+      const moduleObj = { exports: moduleExports };
+
+      // 为音源脚本提供常用模块
+      const sandboxRequire = (moduleName) => {
+        const availableModules = {
+          axios: () => require('axios'),
+          he: () => require('he'),
+          crypto: () => require('crypto'),
+          qs: () => require('qs'),
+          cheerio: () => require('cheerio'),
+        };
+
+        if (availableModules[moduleName]) {
+          return availableModules[moduleName]();
+        }
+
+        // 对于其他模块，尝试使用真实的 require
+        try {
+          return require(moduleName);
+        } catch (err) {
+          console.error(`[LXRuntime] Module not available: ${moduleName}`);
+          throw new Error(`Cannot find module '${moduleName}' in sandbox`);
+        }
+      };
+
+      const scriptFunc = new Function('lx', 'module', 'exports', 'require', scriptContent);
+      scriptFunc(globalThis.lx, moduleObj, moduleExports, sandboxRequire);
+
+      // 如果脚本使用了 module.exports，将导出的内容合并到 lx 对象
+      if (moduleObj.exports && Object.keys(moduleObj.exports).length > 0) {
+        // 将导出的函数/对象添加到 lx 对象
+        Object.assign(globalThis.lx, moduleObj.exports);
+      }
 
       const sourceId = metadata.id || path.basename(scriptPath, '.js');
       this.sources.set(sourceId, {

@@ -36,6 +36,35 @@ tasks:
       - npm install --production
       - npm prune --production
 
+  build:lx-music-service:
+    summary: Build lx-music-service bundle using esbuild
+    dir: lx-music-service
+    sources:
+      - "*.js"
+      - sources/*
+      - package.json
+    generates:
+      - dist/server.bundle.js
+      - dist/sources/*
+    preconditions:
+      - sh: npm version
+        msg: "Node.js is required. Please install from https://nodejs.org/"
+    cmds:
+      - npm install
+      - npm run build
+      - |
+        echo "✅ lx-music-service bundle built successfully"
+        ls -lh dist/server.bundle.js || echo "Bundle not found"
+        du -sh dist/ || echo "Cannot calculate size"
+      # 复制到 plugins/musicplayer/ 以便 Go embed
+      - |
+        echo "Copying bundle to plugins/musicplayer/ for Go embed..."
+        rm -rf ../plugins/musicplayer/lx-music-service/dist
+        mkdir -p ../plugins/musicplayer/lx-music-service/dist
+        cp -r dist/* ../plugins/musicplayer/lx-music-service/dist/
+        echo "✅ Bundle copied for embedding (dist/ includes sources/)"
+        ls -lh ../plugins/musicplayer/lx-music-service/dist/
+
   build:frontend:
     label: build:frontend (DEV={{.DEV}})
     summary: Build the frontend project
@@ -211,17 +240,27 @@ tasks:
       - xcrun xcdevice list
 
   package:lx-music-service:
-    summary: Package LX music service for distribution
+    summary: Package LX music service for distribution (optimized bundle mode)
     desc: |
-      Installs production dependencies and prepares lx-music-service for distribution.
+      Builds optimized bundle using esbuild and prepares for embedding.
+      This reduces embedded size from ~15MB (node_modules) to ~500KB-1MB (single bundle).
       This task should be run before building the final application package.
     deps:
-      - task: install:lx-music-service:deps
+      - task: build:lx-music-service
     cmds:
       - |
-        echo "LX music service dependencies installed successfully"
-        echo "Service directory: lx-music-service/"
-        du -sh lx-music-service/node_modules || true
+        echo "LX music service bundle built successfully"
+        echo "Bundle size:"
+        ls -lh lx-music-service/dist/server.bundle.js || true
+        du -sh lx-music-service/dist/ || true
+      - |
+        echo "Copying lx-music-service dist to plugins/musicplayer/ for embedding..."
+        rm -rf plugins/musicplayer/lx-music-service
+        mkdir -p plugins/musicplayer/lx-music-service
+        cp -r lx-music-service/dist plugins/musicplayer/lx-music-service/
+        echo "Copied successfully for Go embed (dist/ includes sources/)"
+        echo "Embedded contents:"
+        ls -la plugins/musicplayer/lx-music-service/
 
   ios:run:device:
     summary: Build, install, and launch on a physical iPhone using Apple tools (xcodebuild/devicectl)

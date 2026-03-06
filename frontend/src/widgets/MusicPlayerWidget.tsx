@@ -856,6 +856,23 @@ export function MusicPlayerWidget() {
                             />
                         </div>
                         <span className="vinyl-time">{formatTime(duration)}</span>
+
+                        {/* 下载按钮 - 进度条右边 */}
+                        {currentSong && (
+                            <button
+                                onClick={handleDownloadCurrentSong}
+                                className="vinyl-download-btn"
+                                title="下载当前歌曲"
+                                disabled={isDownloading}
+                            >
+                                {isDownloading ? (
+                                    <Icon name="refresh-cw" size={16} className="animate-spin" />
+                                ) : (
+                                    <Icon name="download" size={16} />
+                                )}
+                            </button>
+                        )}
+
                     </div>
 
                     {/* 喜欢按钮 - 左上角 */}
@@ -910,20 +927,6 @@ export function MusicPlayerWidget() {
                             title={showSearch ? '关闭搜索' : '搜索'}
                         >
                             <Icon name={showSearch ? 'x' : 'search'} size={20} />
-                        </button>
-
-                        {/* 下载当前歌曲按钮 */}
-                        <button
-                            onClick={handleDownloadCurrentSong}
-                            className="vinyl-btn vinyl-btn-secondary"
-                            title="下载当前歌曲"
-                            disabled={isDownloading || !currentSong}
-                        >
-                            {isDownloading ? (
-                                <Icon name="refresh-cw" size={20} className="animate-spin" />
-                            ) : (
-                                <Icon name="download" size={20} />
-                            )}
                         </button>
                     </div>
                 </div>
@@ -1304,7 +1307,7 @@ export function MusicPlayerWidget() {
                 .vinyl-info {
                     text-align: center;
                     max-width: 320px;
-                    min-height: 76px;
+                    min-height: 57px;
                     animation: vinyl-fade-in 0.5s ease-out;
                 }
 
@@ -1506,6 +1509,33 @@ export function MusicPlayerWidget() {
                     border-color: #ff0080;
                     color: #ff0080;
                     box-shadow: 0 0 20px rgba(255, 0, 128, 0.5);
+                }
+
+                /* 下载按钮 - 进度条上方 */
+                .vinyl-download-btn {
+                    border-radius: 50%;
+                    background: transparent;
+                    border: none;
+                    color: rgba(0, 255, 255, 0.6);
+                    cursor: pointer;
+                    display: flex;
+                    align-items: end;
+                    justify-content: center;
+                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                }
+
+                .vinyl-download-btn:hover {
+                    color: #00ffff;
+                    transform: scale(1.15);
+                }
+
+                .vinyl-download-btn:disabled {
+                    opacity: 0.4;
+                    cursor: not-allowed;
+                }
+
+                .vinyl-download-btn:disabled:hover {
+                    transform: none;
                 }
 
                 /* 搜索面板 */

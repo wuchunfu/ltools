@@ -524,16 +524,21 @@ func main() {
 	localTranslateService := localtranslate.NewLocalTranslateService(localTranslatePlugin, app)
 
 	// Create musicplayer service to expose music player functionality to frontend
+	log.Println("[DEBUG] About to create musicplayer service...")
 	musicPlayerProxyAdapter := proxy.NewMusicPlayerAdapter(proxyManager)
+	log.Println("[DEBUG] Creating ServiceLX...")
 	musicPlayerServiceLX, err := musicplayer.NewServiceLX(musicPlayerPlugin, app, musicPlayerProxyAdapter)
 	if err != nil {
-		log.Fatal("Failed to create musicplayer service:", err)
-	}
-	musicPlayerPlugin.SetService(musicPlayerServiceLX)
-	log.Printf("[INFO] Using LX Music service")
+		log.Printf("[ERROR] Failed to create musicplayer service: %v", err)
+	} else {
+		log.Println("[SUCCESS] ServiceLX created successfully, setting service...")
+		musicPlayerPlugin.SetService(musicPlayerServiceLX)
+		log.Printf("[INFO] Using LX Music service")
 
-	// Register service to app
-	app.RegisterService(application.NewService(musicPlayerServiceLX))
+		// Register service to app
+		app.RegisterService(application.NewService(musicPlayerServiceLX))
+		log.Println("[SUCCESS] LX Music service registered to app")
+	}
 
 	// Create shortcut service to expose keyboard shortcut management to frontend
 	shortcutService, err := plugins.NewShortcutService(app, dataDir)

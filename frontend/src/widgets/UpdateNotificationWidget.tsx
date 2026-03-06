@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Events } from '@wailsio/runtime';
 import * as UpdateService from '../../bindings/ltools/internal/update/service';
 import { Icon } from '../components/Icon';
@@ -20,9 +20,102 @@ export function UpdateNotification() {
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloaded, setDownloaded] = useState(false);
+  const [installing, setInstalling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
+  // 先定义所有回调函数
+  const handleRestart = useCallback(async () => {
+    try {
+      setError(null);
+      await UpdateService.RestartApp();
+    } catch (err) {
+      console.error('Restart failed:', err);
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  const handleInstall = useCallback(async (filePath: string) => {
+    if (!filePath) {
+      setError('安装失败：文件路径不存在');
+      return;
+    }
+
+    try {
+      setInstalling(true);
+      setError(null);
+      await UpdateService.InstallUpdate(filePath);
+
+      // macOS/Linux: 安装成功后会发送 update:installed 事件
+      // Windows: 安装程序会自动退出应用
+      console.log('Update installation started...');
+    } catch (err) {
+      console.error('Installation failed:', err);
+      setInstalling(false);
+      setDownloaded(false);
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  const handleDownload = useCallback(async () => {
+    if (!updateInfo) return;
+
+    // 参数验证
+    if (!updateInfo.downloadUrl || !updateInfo.checksum) {
+      setError('更新信息不完整，请稍后重试');
+      return;
+    }
+
+    setDownloading(true);
+    setDownloaded(false);
+    setDownloadProgress(0);
+    setError(null);
+
+    try {
+      const filePath = await UpdateService.DownloadUpdate(
+        updateInfo.downloadUrl,
+        updateInfo.checksum
+      );
+
+      console.log('Download completed:', filePath);
+      setDownloaded(true);
+      setDownloading(false);
+
+      // 自动安装（macOS/Linux 会等待用户确认，Windows 会立即退出）
+      await handleInstall(filePath);
+    } catch (err) {
+      console.error('Download failed:', err);
+      setError(err instanceof Error ? err.message : String(err));
+      setDownloading(false);
+    }
+  }, [updateInfo, handleInstall]);
+
+  const handleDismiss = useCallback(() => {
+    if (!updateInfo?.mandatory) {
+      setDismissed(true);
+    }
+  }, [updateInfo?.mandatory]);
+
+  const handleCheckUpdate = useCallback(async () => {
+    try {
+      setError(null);
+      const info = await UpdateService.CheckForUpdate();
+
+      if (info) {
+        setUpdateInfo(info);
+        setDismissed(false);
+      } else {
+        // 已经是最新版本
+        setError('您已经在使用最新版本！');
+        setTimeout(() => setError(null), 3000);
+      }
+    } catch (err) {
+      console.error('Check update failed:', err);
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  // 然后使用 useEffect
   useEffect(() => {
     // 监听更新可用事件
     const unsubscribeUpdate = Events.On('update:available', (ev) => {
@@ -45,12 +138,13 @@ export function UpdateNotification() {
     const unsubscribeInstalled = Events.On('update:installed', (ev) => {
       console.log('Update installed:', ev.data);
       if (ev.data) {
-        setDownloaded(true);
-        setDownloading(false);
+        setInstalling(false);
+        setDownloaded(false);
+
         // 显示重启提示
         if (ev.data.action === 'restart') {
-          // 可以在这里自动重启或显示重启按钮
-          setError(null);
+          // 自动重启应用
+          handleRestart();
         }
       }
     });
@@ -60,72 +154,7 @@ export function UpdateNotification() {
       unsubscribeProgress();
       unsubscribeInstalled();
     };
-  }, []);
-
-  const handleDownload = async () => {
-    if (!updateInfo) return;
-
-    setDownloading(true);
-    setDownloaded(false);
-    setDownloadProgress(0);
-    setError(null);
-
-    try {
-      const filePath = await UpdateService.DownloadUpdate(
-        updateInfo.downloadUrl,
-        updateInfo.checksum
-      );
-
-      console.log('Download completed:', filePath);
-      setDownloaded(true);
-      setDownloading(false);
-
-      // 自动安装
-      await handleInstall(filePath);
-    } catch (err) {
-      console.error('Download failed:', err);
-      setError(err instanceof Error ? err.message : String(err));
-      setDownloading(false);
-    }
-  };
-
-  const handleInstall = async (filePath: string) => {
-    try {
-      setError(null);
-      await UpdateService.InstallUpdate(filePath);
-
-      // 安装成功，应用会重启
-      console.log('Update installed, application will restart...');
-    } catch (err) {
-      console.error('Installation failed:', err);
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
-  const handleDismiss = () => {
-    if (!updateInfo?.mandatory) {
-      setDismissed(true);
-    }
-  };
-
-  const handleCheckUpdate = async () => {
-    try {
-      setError(null);
-      const info = await UpdateService.CheckForUpdate();
-
-      if (info) {
-        setUpdateInfo(info);
-        setDismissed(false);
-      } else {
-        // 已经是最新版本
-        setError('您已经在使用最新版本！');
-        setTimeout(() => setError(null), 3000);
-      }
-    } catch (err) {
-      console.error('Check update failed:', err);
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  };
+  }, [handleRestart]);
 
   if (!updateInfo || dismissed) {
     // 手动检查更新按钮
@@ -190,7 +219,7 @@ export function UpdateNotification() {
           )}
 
           <div className="flex gap-2">
-            {!downloading && !downloaded && (
+            {!downloading && !downloaded && !installing && (
               <>
                 <button
                   onClick={handleDownload}
@@ -210,13 +239,16 @@ export function UpdateNotification() {
               </>
             )}
 
-            {downloaded && (
-              <button
-                onClick={() => handleInstall}
-                className="flex-1 bg-white text-purple-600 font-medium px-4 py-2 rounded-lg hover:bg-white/90 transition-colors"
-              >
-                安装并重启
-              </button>
+            {downloading && (
+              <div className="flex-1 text-center text-white/80 text-sm">
+                下载中... {downloadProgress}%
+              </div>
+            )}
+
+            {installing && (
+              <div className="flex-1 text-center text-white/80 text-sm">
+                正在安装...
+              </div>
             )}
           </div>
         </div>

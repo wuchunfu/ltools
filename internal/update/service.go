@@ -105,9 +105,11 @@ func (s *Service) CheckForUpdate() (*UpdateInfo, error) {
 		return nil, err
 	}
 
-	// 检查版本
-	if manifest.Version == s.currentVersion {
-		log.Println("[UpdateService] Already up to date")
+	// 检查版本（使用语义化版本比较）
+	cmp := compareVersions(manifest.Version, s.currentVersion)
+	if cmp <= 0 {
+		// 远程版本 <= 当前版本，已是最新版本
+		log.Printf("[UpdateService] Already up to date (current: %s, remote: %s)", s.currentVersion, manifest.Version)
 		return nil, nil
 	}
 
@@ -207,8 +209,18 @@ func (s *Service) DownloadUpdate(url string, expectedChecksum string) (string, e
 	// 验证校验和
 	actualChecksum := hex.EncodeToString(hash.Sum(nil))
 	if expectedChecksum != "" && !s.verifyChecksum(actualChecksum, expectedChecksum) {
-		os.Remove(tmpFile)
-		return "", fmt.Errorf("checksum verification failed: expected=%s, got=%s", expectedChecksum, actualChecksum)
+		// 校验和验证失败
+		// 保留损坏的文件供调试（添加 .corrupted 后缀）
+		corruptedFile := tmpFile + ".corrupted"
+		if err := os.Rename(tmpFile, corruptedFile); err != nil {
+			log.Printf("[UpdateService] Warning: failed to rename corrupted file: %v", err)
+			os.Remove(tmpFile)
+		} else {
+			log.Printf("[UpdateService] Corrupted file saved for debugging: %s", corruptedFile)
+		}
+
+		// 返回友好的错误信息
+		return "", fmt.Errorf("checksum verification failed: expected=%s, got=%s. The download may be corrupted. Please try again", expectedChecksum, actualChecksum)
 	}
 
 	log.Printf("[UpdateService] Download completed: %d bytes, checksum: %s", written, actualChecksum)
@@ -311,7 +323,9 @@ func (s *Service) installMacOS(filePath string) error {
 	}
 
 	// 8. 删除备份
-	os.Remove(backupPath)
+	if err := os.Remove(backupPath); err != nil {
+		log.Printf("[UpdateService] Warning: failed to remove backup: %v", err)
+	}
 
 	log.Println("[UpdateService] macOS installation completed successfully")
 
@@ -339,24 +353,24 @@ func (s *Service) installWindows(filePath string) error {
 	// 3. 运行 NSIS 静默安装
 	// NSIS 参数: /S (静默) /D=目录 (安装目录，必须是最后一个参数)
 	cmd := exec.Command(filePath, "/S", "/D="+currentDir)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
 	log.Printf("[UpdateService] Running silent installer: %s /S /D=%s", filePath, currentDir)
 
+	// 4. 启动安装程序（不等待完成）
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start installer: %w", err)
 	}
 
-	// 4. 等待安装完成
-	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("installer failed: %w", err)
-	}
+	// 5. 给安装程序 2 秒启动时间
+	time.Sleep(2 * time.Second)
 
-	log.Println("[UpdateService] Windows installation completed successfully")
+	log.Println("[UpdateService] Installer started, exiting current application...")
 
-	// 5. 提示重启
-	return s.promptRestart()
+	// 6. 退出当前应用，让安装程序完成
+	// 安装程序会自动覆盖文件并重启应用
+	os.Exit(0)
+
+	return nil
 }
 
 // installLinux Linux 安装逻辑
@@ -406,7 +420,9 @@ func (s *Service) installLinuxAppImage(filePath string) error {
 	}
 
 	// 5. 删除备份
-	os.Remove(backupPath)
+	if err := os.Remove(backupPath); err != nil {
+		log.Printf("[UpdateService] Warning: failed to remove backup: %v", err)
+	}
 
 	log.Println("[UpdateService] AppImage installation completed successfully")
 
@@ -668,4 +684,63 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 	}
 
 	return n, nil
+}
+
+// compareVersions 比较两个语义化版本号
+// 返回值: 1 (v1 > v2), 0 (v1 == v2), -1 (v1 < v2)
+func compareVersions(v1, v2 string) int {
+	// 移除可能的 'v' 前缀
+	v1 = strings.TrimPrefix(v1, "v")
+	v2 = strings.TrimPrefix(v2, "v")
+
+	// 分割版本号
+	parts1 := strings.Split(v1, ".")
+	parts2 := strings.Split(v2, ".")
+
+	// 确保至少有 3 个部分 (major.minor.patch)
+	for len(parts1) < 3 {
+		parts1 = append(parts1, "0")
+	}
+	for len(parts2) < 3 {
+		parts2 = append(parts2, "0")
+	}
+
+	// 比较每个部分
+	for i := 0; i < 3; i++ {
+		num1, err1 := parseVersionPart(parts1[i])
+		num2, err2 := parseVersionPart(parts2[i])
+
+		// 如果解析失败，按字符串比较
+		if err1 != nil || err2 != nil {
+			if parts1[i] > parts2[i] {
+				return 1
+			} else if parts1[i] < parts2[i] {
+				return -1
+			}
+			continue
+		}
+
+		if num1 > num2 {
+			return 1
+		} else if num1 < num2 {
+			return -1
+		}
+	}
+
+	return 0
+}
+
+// parseVersionPart 解析版本号的某个部分
+func parseVersionPart(part string) (int, error) {
+	// 移除可能的后缀（如 "-beta", "-rc1"）
+	if idx := strings.Index(part, "-"); idx != -1 {
+		part = part[:idx]
+	}
+	if idx := strings.Index(part, "+"); idx != -1 {
+		part = part[:idx]
+	}
+
+	var num int
+	_, err := fmt.Sscanf(part, "%d", &num)
+	return num, err
 }

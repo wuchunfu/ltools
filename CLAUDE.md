@@ -269,7 +269,7 @@ app.RegisterService(application.NewService(service))
 - `clipboard:count`、`clipboard:heartbeat`
 - `clipboard:permission:requested`
 
-**调试日志：** `/Users/yanglian/code/ltools/clipboard-debug.log`
+**调试日志：** `~/Library/Application Support/ltools/logs/clipboard-debug.log` (macOS) 或 `~/.config/ltools/logs/clipboard-debug.log` (Linux)
 
 ### Screenshot 插件 (`plugins/screenshot/`)
 屏幕捕获和标注（微信风格）
@@ -536,7 +536,7 @@ dev_mode:
 - **Android**：需要 Android SDK/NDK
 
 ### 调试基础设施
-- 剪贴板调试：`./logs/clipboard-debug.log`
+- 剪贴板调试：`~/Library/Application Support/ltools/logs/clipboard-debug.log` (macOS)
 - 全局热键调试：`/tmp/gohook_debug.log`
 
 ### 命名约定
