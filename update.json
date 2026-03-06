@@ -1,23 +1,23 @@
 {
-  "version": "0.1.0",
-  "releaseDate": "2026-03-06T09:41:55Z",
-  "releaseNotes": "docs: 优化发布流程和文档体系\n\n## 主要改进\n\n### 发布流程优化\n- 从 git tag 消息自动提取 releaseNotes（用于 update.json）\n- 使用 RELEASE.md 模板作为 GitHub Release 页面内容\n- 自动过滤 Co-Authored-By 签名行\n- 空消息使用默认通用内容\n\n### 新增文档\n- RELEASE.md: 发布说明模板（支持占位符替换）\n- RELEASING.md: 发布快速参考\n- docs/RELEASE_PROCESS.md: 完整发布流程指南\n- docs/macOS_SECURITY.md: macOS 安全性问题排查\n\n### 文档更新\n- README.md: 添加音乐播放器、自动更新、安装指南\n- docs/GITHUB_RELEASES.md: 说明双来源发布说明机制\n\n### 技术实现\n- scripts/generate-update-manifest.sh: 从 git tag 获取消息\n- .github/workflows/release.yml: 从 RELEASE.md 读取内容",
+  "version": "0.1.1",
+  "releaseDate": "2026-03-06T11:26:46Z",
+  "releaseNotes": "chore: bump version to 0.1.1",
   "mandatory": false,
   "platforms": {
     "darwin-arm64": {
-      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.0/ltools-v0.1.0-darwin-arm64.tar.gz",
-      "size": 9347416,
-      "checksum": "sha256:6d6b6238d889bb1660d77e83536bd7c93a17bc70344900429fe5e536f2919fc1"
+      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.1/ltools-v0.1.1-darwin-arm64.tar.gz",
+      "size": 9349700,
+      "checksum": "sha256:8d822f06f7bbb4d4a90c5e85aa56d3945ae337bb24c093e0bc70d7d5786fb0b7"
     },
     "windows-amd64": {
-      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.0/ltools-v0.1.0-windows-amd64-installer.exe",
-      "size": 13562843,
-      "checksum": "sha256:412ec6dbc7b12d2a5d95122b20c264e5e5e4c3fc198c83a3ec210cefc4bc5a02"
+      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.1/ltools-v0.1.1-windows-amd64-installer.exe",
+      "size": 13565150,
+      "checksum": "sha256:8e70d0dc84aa242fb0674d592079feb4d95c8496f134d52ef12f656b83ed4076"
     },
     "linux-amd64": {
-      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.0/ltools-v0.1.0-linux-amd64.AppImage",
+      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.1/ltools-v0.1.1-linux-amd64.AppImage",
       "size": 79522296,
-      "checksum": "sha256:a881664e9fc9e0b0df0d36cd3d14be252126367e6268c10f657db814f046173a"
+      "checksum": "sha256:a6a1df7007b862dcca26aaa9a71caf7369cd40fdf36e76091e2ab264c05ef288"
     }
   }
 }
