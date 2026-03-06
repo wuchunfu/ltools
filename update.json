@@ -1,23 +1,23 @@
 {
   "version": "0.1.0",
-  "releaseDate": "2026-03-06T08:32:59Z",
-  "releaseNotes": "## 新功能\n- 自动更新机制\n\n## 改进\n- 性能优化\n\n## 修复\n- Bug 修复",
+  "releaseDate": "2026-03-06T09:41:55Z",
+  "releaseNotes": "docs: 优化发布流程和文档体系\n\n## 主要改进\n\n### 发布流程优化\n- 从 git tag 消息自动提取 releaseNotes（用于 update.json）\n- 使用 RELEASE.md 模板作为 GitHub Release 页面内容\n- 自动过滤 Co-Authored-By 签名行\n- 空消息使用默认通用内容\n\n### 新增文档\n- RELEASE.md: 发布说明模板（支持占位符替换）\n- RELEASING.md: 发布快速参考\n- docs/RELEASE_PROCESS.md: 完整发布流程指南\n- docs/macOS_SECURITY.md: macOS 安全性问题排查\n\n### 文档更新\n- README.md: 添加音乐播放器、自动更新、安装指南\n- docs/GITHUB_RELEASES.md: 说明双来源发布说明机制\n\n### 技术实现\n- scripts/generate-update-manifest.sh: 从 git tag 获取消息\n- .github/workflows/release.yml: 从 RELEASE.md 读取内容",
   "mandatory": false,
   "platforms": {
     "darwin-arm64": {
       "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.0/ltools-v0.1.0-darwin-arm64.tar.gz",
-      "size": 9347421,
-      "checksum": "sha256:b9bf2defb327daf8c2c57351156de46cb2687dfd17048b2561ebc93d28e3d30b"
+      "size": 9347416,
+      "checksum": "sha256:6d6b6238d889bb1660d77e83536bd7c93a17bc70344900429fe5e536f2919fc1"
     },
     "windows-amd64": {
       "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.0/ltools-v0.1.0-windows-amd64-installer.exe",
-      "size": 13563010,
-      "checksum": "sha256:2d075855bc3a8fa6af067e89ecea76841304da0093cb69031b9f43be464cc1da"
+      "size": 13562843,
+      "checksum": "sha256:412ec6dbc7b12d2a5d95122b20c264e5e5e4c3fc198c83a3ec210cefc4bc5a02"
     },
     "linux-amd64": {
       "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.0/ltools-v0.1.0-linux-amd64.AppImage",
       "size": 79522296,
-      "checksum": "sha256:5f8a55ab9db2ddd4d348b58dffee16411d04d5cbb59267a4235d9f124bd85d9a"
+      "checksum": "sha256:a881664e9fc9e0b0df0d36cd3d14be252126367e6268c10f657db814f046173a"
     }
   }
 }
