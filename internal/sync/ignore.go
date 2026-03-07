@@ -17,6 +17,12 @@ var DefaultIgnorePatterns = []string{
 	"*.gguf",
 	"*.bin",
 
+	// Update files
+	"updates",
+
+	// Music Server files
+	"lx-music-service",
+
 	// Temporary files
 	"*.tmp",
 	"*.log",

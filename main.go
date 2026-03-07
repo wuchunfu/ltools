@@ -605,16 +605,23 @@ func main() {
 	// 'BackgroundColour' is the background colour of the window.
 	// 'URL' is the URL that will be loaded into the webview.
 	mainWindow = app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:  "LTools",
-		Width:  1400,
-		Height: 900,
+		Title:     "LTools",
+		Width:     1400,
+		Height:    900,
+		MinWidth:  1400,
+		MinHeight: 900,
+		//DisableResize:       true,                      // 禁用调整大小
+		MinimiseButtonState: application.ButtonEnabled, // 开启最小化按钮
+		MaximiseButtonState: application.ButtonEnabled, // 开启最大化按钮
+		UseApplicationMenu:  true,                      // 使用应用程序菜单（对 macOS 无影响）
 		Mac: application.MacWindow{
 			TitleBar: application.MacTitleBar{
 				HideTitle:          true, // 隐藏标题文字
 				AppearsTransparent: true, // 标题栏透明
 				FullSizeContent:    true, // 内容延伸到标题栏区域（关键！）
 			},
-			Backdrop: application.MacBackdropTransparent,
+			Backdrop:                application.MacBackdropTransparent,
+			InvisibleTitleBarHeight: 40, // 不可见标题栏区域（用于拖动）的高度
 		},
 		BackgroundColour: application.NewRGB(27, 38, 54),
 		URL:              "/",
