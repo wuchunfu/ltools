@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"ltools/internal/plugins"
@@ -557,9 +558,26 @@ func main() {
 	// Set app launcher service for app search integration
 	searchWindowService.SetAppLauncherService(appLauncherService)
 
+	// Load version from build/config.yml
+	version := "0.1.0" // fallback version
+	if configData, err := os.ReadFile("build/config.yml"); err == nil {
+		// Simple regex to extract version from YAML
+		lines := strings.Split(string(configData), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "version:") {
+				parts := strings.SplitN(line, ":", 2)
+				if len(parts) == 2 {
+					version = strings.Trim(strings.TrimSpace(parts[1]), "\"'")
+					break
+				}
+			}
+		}
+	}
+
 	// Create update service
 	updateService := update.NewService(&update.ServiceConfig{
-		CurrentVersion: "0.1.0", // TODO: 从 build/config.yml 读取
+		CurrentVersion: version,
 		UpdateURL:      "https://raw.githubusercontent.com/lian-yang/ltools/main/",
 		DataDir:        dataDir,
 		Enabled:        true, // TODO: 从用户配置读取

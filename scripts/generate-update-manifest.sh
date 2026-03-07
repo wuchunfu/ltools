@@ -118,7 +118,8 @@ check_and_add_platform() {
     # 这样 "windows-amd64-installer" 会映射到 "windows-amd64" 平台键
     local platform_key="${platform%-installer}"
 
-    # 单行格式，    PLATFORM_INFOS+=("    \"$platform_key\": {\"url\": \"$BASE_URL/ltools-$VERSION-$platform.$ext\", \"size\": $size, \"checksum\": \"sha256:$checksum\"}")
+    # 添加平台信息到数组
+    PLATFORM_INFOS+=("    \"$platform_key\": {\"url\": \"$BASE_URL/ltools-$VERSION-$platform.$ext\", \"size\": $size, \"checksum\": \"sha256:$checksum\"}")
   fi
 }
 
