@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Icon } from './Icon';
 import { SettingsNav, SettingsCategory } from './SettingsNav';
 import { GeneralSettings } from './GeneralSettings';
@@ -18,7 +18,18 @@ interface SettingsProps {
  * 左侧导航 + 右侧内容区域的二级菜单布局
  */
 export function Settings({ shortcuts, onSetShortcut, onRemoveShortcut }: SettingsProps) {
-  const [activeCategory, setActiveCategory] = useState<SettingsCategory>('general');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // 从 URL 参数读取当前标签页
+  const activeCategory: SettingsCategory = (() => {
+    const tab = searchParams.get('tab') as SettingsCategory;
+    return tab && ['general', 'shortcuts', 'sync', 'plugins', 'about'].includes(tab) ? tab : 'general';
+  })();
+
+  // 当标签页改变时,更新 URL 参数
+  const handleCategoryChange = (category: SettingsCategory) => {
+    setSearchParams({ tab: category });
+  };
 
   /**
    * 渲染当前选中的设置内容
@@ -66,7 +77,7 @@ export function Settings({ shortcuts, onSetShortcut, onRemoveShortcut }: Setting
       {/* 左侧导航 */}
       <SettingsNav
         activeCategory={activeCategory}
-        onCategoryChange={setActiveCategory}
+        onCategoryChange={handleCategoryChange}
       />
 
       {/* 右侧内容区域 */}

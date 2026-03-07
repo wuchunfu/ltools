@@ -277,7 +277,16 @@ func main() {
 	})
 	menu.AddSeparator()
 	menu.Add("关于 LTools").OnClick(func(_ *application.Context) {
-		log.Println("LTools - 插件式桌面工具箱 v1.0.0")
+		if mainWindow != nil {
+			// 显示并聚焦窗口
+			mainWindow.Show()
+			mainWindow.Focus()
+			// 通过事件通知前端导航到关于页面，避免页面重新加载
+			app.Event.Emit("navigate:to", map[string]string{
+				"path": "/settings",
+				"tab":  "about",
+			})
+		}
 	})
 	menu.AddSeparator()
 	menu.Add("退出").OnClick(func(_ *application.Context) {
@@ -597,6 +606,11 @@ func main() {
 	app.RegisterService(application.NewService(shortcutService))
 	app.RegisterService(application.NewService(searchWindowService))
 	app.RegisterService(application.NewService(syncService))
+
+	 // Start sync service
+    if err := syncService.ServiceStartup(app); err != nil {
+        log.Printf("Failed to start sync service: %v", err)
+    }
 	app.RegisterService(application.NewService(updateService))
 
 	// Create a new window with the necessary options.

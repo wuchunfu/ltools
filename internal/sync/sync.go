@@ -357,18 +357,40 @@ func (m *SyncManager) StartAutoSync() error {
 	}
 
 	cfg := m.config.Get()
-	if !cfg.AutoSync || cfg.SyncInterval <= 0 {
+	fmt.Printf("[SyncManager] StartAutoSync called: Enabled=%v, AutoSync=%v, SyncInterval=%d\n",
+		cfg.Enabled, cfg.AutoSync, cfg.SyncInterval)
+
+	if !cfg.Enabled {
+		fmt.Println("[SyncManager] Sync is disabled, auto-sync will not start")
+		return nil
+	}
+
+	if !cfg.AutoSync {
+		fmt.Println("[SyncManager] Auto-sync is disabled in config")
+		return nil
+	}
+
+	if cfg.SyncInterval <= 0 {
+		fmt.Printf("[SyncManager] Invalid sync interval: %d\n", cfg.SyncInterval)
 		return nil
 	}
 
 	interval := time.Duration(cfg.SyncInterval) * time.Minute
 	m.ticker = time.NewTicker(interval)
 	m.running = true
+	nextSync := time.Now().Add(interval)
+
+	fmt.Printf("[SyncManager] Auto-sync started with interval %v\n", interval)
+	fmt.Printf("[SyncManager] Next sync will trigger at: %s\n", nextSync.Format("15:04:05"))
 
 	go func() {
+		fmt.Printf("[SyncManager] Auto-sync goroutine started, waiting for ticker (interval: %v)\n", interval)
+		syncCount := 0
 		for {
 			select {
 			case <-m.ticker.C:
+				syncCount++
+				fmt.Printf("[SyncManager] Ticker triggered (sync #%d at %v)\n", syncCount, time.Now().Format("15:04:05"))
 				result := m.Sync()
 				if !result.Success {
 					fmt.Printf("[SyncManager] Auto-sync failed: %s\n", result.Error)
@@ -379,6 +401,7 @@ func (m *SyncManager) StartAutoSync() error {
 					fmt.Printf("[SyncManager] Auto-sync succeeded: %s\n", result.Message)
 				}
 			case <-m.stopChan:
+				fmt.Printf("[SyncManager] Auto-sync goroutine stopped (completed %d syncs)\n", syncCount)
 				return
 			}
 		}
@@ -460,6 +483,11 @@ func (m *SyncManager) SetConfig(cfg *SyncConfig) error {
 		(oldCfg.AutoSync != cfg.AutoSync ||
 			oldCfg.SyncInterval != cfg.SyncInterval)
 
+	fmt.Printf("[SyncManager] Config updated: old(Enabled=%v, AutoSync=%v, Interval=%d), new(Enabled=%v, AutoSync=%v, Interval=%d)\n",
+		oldCfg.Enabled, oldCfg.AutoSync, oldCfg.SyncInterval,
+		cfg.Enabled, cfg.AutoSync, cfg.SyncInterval)
+	fmt.Printf("[SyncManager] Running=%v, needsRestart=%v\n", m.running, needsRestart)
+
 	if needsRestart {
 		fmt.Println("[SyncManager] Configuration changed, restarting auto-sync")
 		m.StopAutoSync()
@@ -467,7 +495,10 @@ func (m *SyncManager) SetConfig(cfg *SyncConfig) error {
 
 	// Start auto-sync if enabled
 	if cfg.AutoSync && cfg.Enabled {
+		fmt.Println("[SyncManager] Starting auto-sync with new config")
 		m.StartAutoSync()
+	} else if !cfg.AutoSync || !cfg.Enabled {
+		fmt.Println("[SyncManager] Auto-sync not started (AutoSync or Enabled is false)")
 	}
 
 	return nil

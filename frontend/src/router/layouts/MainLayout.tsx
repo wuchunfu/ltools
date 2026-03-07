@@ -1,4 +1,6 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Events } from '@wailsio/runtime'
 import { ToastProvider } from '../../contexts/ToastContext'
 import { Sidebar } from '../../components/navigation/Sidebar'
 import { useGlobalShortcuts } from '../../hooks/useGlobalShortcuts'
@@ -12,8 +14,29 @@ export type { IconName } from '../types'
  * 包含侧边栏和主内容区域
  */
 export function MainLayout() {
+  const navigate = useNavigate()
+
   // 初始化全局快捷键监听
   useGlobalShortcuts()
+
+  // 监听来自后端的全局导航事件
+  useEffect(() => {
+    const unsubscribe = Events.On('navigate:to', (ev: any) => {
+      console.log('[MainLayout] Received navigate:to event:', ev)
+      const data = ev.data as { path: string; tab?: string }
+      if (data.path) {
+        // 构建完整的 URL（包含查询参数）
+        const url = data.tab ? `${data.path}?tab=${data.tab}` : data.path
+        navigate(url, { replace: false })
+      }
+    })
+
+    return () => {
+      if (unsubscribe && typeof unsubscribe === 'function') {
+        unsubscribe()
+      }
+    }
+  }, [navigate])
 
   return (
     <ToastProvider>
