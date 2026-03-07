@@ -12,9 +12,9 @@ vars:
   APP_NAME: "ltools"
   BIN_DIR: "bin"
   VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
-  # 从 build/config.yml 动态读取版本号
+  # 从 build/config.yml 的 info 部分读取版本号
   VERSION:
-    sh: grep -E '^\s*version:' build/config.yml | sed 's/.*version:\s*["'\'']\?\([^"'\'']*\)["'\'']\?.*/\1/' | head -1
+    sh: awk '/^info:/{found=1} found && /^[[:space:]]*version:/{gsub(/["'\'']/, "", $2); print $2; exit}' build/config.yml
 
 tasks:
   build:
