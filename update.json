@@ -1,23 +1,23 @@
 {
-  "version": "0.1.1",
-  "releaseDate": "2025-03-07T00:00:00Z",
-  "releaseNotes": "- 图床插件支持同步子目录中的图片（使用 Git Tree API 递归获取所有文件）\n\n- 音乐播放器服务打包优化\n  - 使用 esbuild 打包，体积从 15MB 降至 1.8MB\n  - 启动速度更快，文件数量更少\n- FRP 插件查找逻辑优化\n  - 支持双击启动时正确查找 frpc\n  - 扩展常见安装路径列表（~/bin, Homebrew, /usr/local/bin 等）\n  - 不依赖 shell 环境，更可靠\n\n- 修复双击启动 .app 时找不到 frpc 的问题\n- 修复双击启动 .app 时找不到 Node.js 的问题（macOS）\n- 修复图床同步只同步根目录图片的问题\n- 修复剪贴板插件日志路径错误（使用 UserConfigDir 而非相对路径）",
+  "version": "0.1.2",
+  "releaseDate": "2026-03-07T06:20:56Z",
+  "releaseNotes": "fix: correct version extraction from build/config.yml\n\nProblem:\n- Previous regex matched first 'version:' line (docker-compose format version '3')\n- Should extract application version from 'info:' section (0.1.2)\n\nSolution:\n- Use awk to find 'info:' block first\n- Then extract 'version:' within that block\n- Correctly returns: 0.1.2 (not '3')\n\nTesting:\n✓ awk '/^info:/{found=1} found && /^[[:space:]]*version:/{...}' build/config.yml\n✓ Returns: 0.1.2\n\nRelated: #S387",
   "mandatory": false,
   "platforms": {
     "darwin-arm64": {
-      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.1/ltools-v0.1.1-darwin-arm64.tar.gz",
-      "size": 9349700,
-      "checksum": "sha256:8d822f06f7bbb4d4a90c5e85aa56d3945ae337bb24c093e0bc70d7d5786fb0b7"
+      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.2/ltools-v0.1.2-darwin-arm64.tar.gz",
+      "size": 9357743,
+      "checksum": "sha256:466b1096151d07cb661262190e1cc9287b526125d189c915079a4c0b84ea8b9e"
     },
     "windows-amd64": {
-      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.1/ltools-v0.1.1-windows-amd64-installer.exe",
-      "size": 13565150,
-      "checksum": "sha256:8e70d0dc84aa242fb0674d592079feb4d95c8496f134d52ef12f656b83ed4076"
+      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.2/ltools-v0.1.2-windows-amd64-installer.exe",
+      "size": 13569892,
+      "checksum": "sha256:7ae4f5cea2595550c05245faa65b22bb35e994f79d0b6e9a845d3bf0bcbc7701"
     },
     "linux-amd64": {
-      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.1/ltools-v0.1.1-linux-amd64.AppImage",
-      "size": 79522296,
-      "checksum": "sha256:a6a1df7007b862dcca26aaa9a71caf7369cd40fdf36e76091e2ab264c05ef288"
+      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.2/ltools-v0.1.2-linux-amd64.AppImage",
+      "size": 79555064,
+      "checksum": "sha256:df98c37d45f4ae585a43ce370c82b9739cb75090c97a149eaa5706d3943be1cb"
     }
   }
 }
