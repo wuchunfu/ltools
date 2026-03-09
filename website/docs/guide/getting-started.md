@@ -122,5 +122,4 @@ LTools 启动后会显示在系统托盘中：
 
 - [完整快捷键列表](./shortcuts)
 - [插件详细介绍](/plugins/)
-- [常见问题](./faq)
 - [开发你自己的插件](/dev/plugin-development)

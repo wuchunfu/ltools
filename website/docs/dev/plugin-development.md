@@ -335,8 +335,8 @@ grep "MyPlugin" /tmp/gohook_debug.log
 
 ## 示例插件
 
-参考现有插件实现：
+参考现有插件源码实现（在项目的 `plugins/` 目录）：
 
-- [计算器](../../plugins/calculator) - 简单功能插件
-- [剪贴板](../../plugins/clipboard) - 带状态管理的插件
-- [截图工具](../../plugins/screenshot2) - 复杂功能插件
+- `calculator` - 简单功能插件
+- `clipboard` - 带状态管理的插件
+- `screenshot2` - 复杂功能插件

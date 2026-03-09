@@ -167,5 +167,4 @@ task common:generate:bindings
 ## 下一步
 
 - [插件开发](./plugin-development) - 学习如何创建插件
-- [架构设计](./architecture) - 了解项目架构
-- [API 参考](./api-reference) - 查看可用 API
+- [API 参考](#) - 查看可用 API（即将推出）

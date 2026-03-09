@@ -146,7 +146,7 @@ LTools 采用现代化的技术栈构建：
 
 ## 参与贡献
 
-欢迎提交 Issue 和 Pull Request！查看 [贡献指南](/dev/contributing) 了解更多。
+欢迎提交 Issue 和 Pull Request！查看 [GitHub 仓库](https://github.com/lian-yang/ltools) 了解更多。
 
 ## 许可证
 
