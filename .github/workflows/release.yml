@@ -211,6 +211,11 @@ jobs:
             ARCH="$(uname -m)"
           fi
 
+          # 创建 tar.gz 包（备用格式）
+          echo "Creating tar.gz archive..."
+          tar czf ltools-${{ github.ref_name }}-${{ matrix.goos }}-${ARCH}.tar.gz -C bin LTools.app
+          echo "✓ tar.gz created"
+
           # 创建 DMG 安装包
           if command -v create-dmg &> /dev/null; then
             echo "Creating DMG installer..."
@@ -238,8 +243,7 @@ jobs:
             fi
             echo "✓ DMG created successfully"
           else
-            echo "⚠ create-dmg not available, falling back to tar.gz"
-            tar czf ltools-${{ github.ref_name }}-${{ matrix.goos }}-${ARCH}.tar.gz -C bin LTools.app
+            echo "⚠ create-dmg not available, skipping DMG creation"
           fi
 
       - name: Prepare release (Windows)
