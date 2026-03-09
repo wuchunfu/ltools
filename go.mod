@@ -8,7 +8,7 @@ require (
 	github.com/mozillazg/go-pinyin v0.21.0
 	github.com/robotn/gohook v0.42.3
 	github.com/shirou/gopsutil/v4 v4.26.1
-	github.com/wailsapp/wails/v3 v3.0.0-alpha.69
+	github.com/wailsapp/wails/v3 v3.0.0-alpha.74
 	github.com/zalando/go-keyring v0.2.6
 	golang.org/x/crypto v0.47.0
 	howett.net/plist v1.0.2-0.20250314012144-ee69052608d9

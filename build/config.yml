@@ -13,6 +13,12 @@ info:
   comments: "开发者效率工具" # 备注
   version: "0.1.3" # 应用程序版本
 
+# 自定义协议配置
+protocols:
+  - scheme: ltools
+    description: LTools 自定义协议
+    role: Editor
+
 # iOS 构建配置（取消注释以自定义 iOS 项目生成）
 # 注意：`ios` 下的键在设置时会覆盖 `info` 下的值。
 # ios:
@@ -58,17 +64,16 @@ dev_mode:
 # 文件关联
 # 更多信息请访问：https://v3.wails.io/noit/done/yet
 fileAssociations:
-#  - ext: wails
-#    name: Wails
-#    description: Wails 应用程序文件
-#    iconName: wailsFileIcon
-#    role: Editor
-#  - ext: jpg
-#    name: JPEG
-#    description: 图像文件
-#    iconName: jpegFileIcon
-#    role: Editor
-#    mimeType: image/jpeg  # （可选）
+  - ext: md
+    name: Markdown
+    description: Markdown 文档
+    iconName: markdownFileIcon
+    role: Editor
+  - ext: markdown
+    name: Markdown
+    description: Markdown 文档
+    iconName: markdownFileIcon
+    role: Editor
 
 # 其他数据
 other:

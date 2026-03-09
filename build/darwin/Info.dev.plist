@@ -2,6 +2,33 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 	<dict>
+		<key>CFBundleDocumentTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeExtensions</key>
+				<array>
+					<string>md</string>
+				</array>
+				<key>CFBundleTypeIconFile</key>
+				<string>markdownFileIcon</string>
+				<key>CFBundleTypeName</key>
+				<string>Markdown</string>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+			</dict>
+			<dict>
+				<key>CFBundleTypeExtensions</key>
+				<array>
+					<string>markdown</string>
+				</array>
+				<key>CFBundleTypeIconFile</key>
+				<string>markdownFileIcon</string>
+				<key>CFBundleTypeName</key>
+				<string>Markdown</string>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+			</dict>
+		</array>
 		<key>CFBundleExecutable</key>
 		<string>ltools</string>
 		<key>CFBundleGetInfoString</key>
@@ -15,9 +42,20 @@
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>
-		<string>0.1.0</string>
+		<string>0.1.3</string>
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleURLName</key>
+				<string>wails.com.ltools</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>ltools</string>
+				</array>
+			</dict>
+		</array>
 		<key>CFBundleVersion</key>
-		<string>0.1.0</string>
+		<string>0.1.3</string>
 		<key>LSMinimumSystemVersion</key>
 		<string>10.15.0</string>
 		<key>NSAppTransportSecurity</key>

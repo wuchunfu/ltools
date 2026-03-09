@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 800px;
+      height: 400px;
+      background: linear-gradient(135deg, #0D0F1A 0%, #1a1d2e 50%, #151925 100%);
+      font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* 装饰性背景元素 */
+    .bg-glow {
+      position: absolute;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, transparent 70%);
+      top: -100px;
+      left: -100px;
+    }
+
+    .bg-glow-2 {
+      position: absolute;
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
+      bottom: -50px;
+      right: -50px;
+    }
+
+    /* 玻璃态容器 */
+    .container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 80px;
+      padding: 40px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* 左侧应用区域 */
+    .app-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* 应用图标占位 */
+    .app-icon {
+      width: 100px;
+      height: 100px;
+      background: linear-gradient(135deg, #7C3AED 0%, #8B5CF6 50%, #A78BFA 100%);
+      border-radius: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow:
+        0 8px 32px rgba(124, 58, 237, 0.4),
+        0 2px 8px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      position: relative;
+    }
+
+    .app-icon::before {
+      content: "L";
+      font-size: 48px;
+      font-weight: 700;
+      color: white;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    /* 图标光晕效果 */
+    .app-icon::after {
+      content: "";
+      position: absolute;
+      top: -2px;
+      left: -2px;
+      right: -2px;
+      bottom: -2px;
+      background: linear-gradient(135deg, rgba(124, 58, 237, 0.5), transparent);
+      border-radius: 24px;
+      z-index: -1;
+      filter: blur(8px);
+    }
+
+    .app-label {
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    /* 中间箭头区域 */
+    .arrow-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .arrow {
+      width: 80px;
+      height: 2px;
+      background: linear-gradient(90deg, #7C3AED, #8B5CF6);
+      position: relative;
+      border-radius: 1px;
+    }
+
+    .arrow::after {
+      content: "";
+      position: absolute;
+      right: -2px;
+      top: -4px;
+      width: 0;
+      height: 0;
+      border-top: 5px solid transparent;
+      border-bottom: 5px solid transparent;
+      border-left: 8px solid #8B5CF6;
+    }
+
+    .drag-text {
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    /* 右侧 Applications 区域 */
+    .apps-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .apps-icon {
+      width: 100px;
+      height: 100px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(10px);
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    /* 文件夹图标 */
+    .folder {
+      width: 56px;
+      height: 44px;
+      position: relative;
+    }
+
+    .folder-tab {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 20px;
+      height: 8px;
+      background: linear-gradient(180deg, #60A5FA, #3B82F6);
+      border-radius: 4px 4px 0 0;
+    }
+
+    .folder-body {
+      position: absolute;
+      top: 6px;
+      left: 0;
+      width: 56px;
+      height: 38px;
+      background: linear-gradient(180deg, #3B82F6, #2563EB);
+      border-radius: 0 6px 6px 6px;
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    }
+
+    .apps-label {
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    /* 底部品牌文字 */
+    .brand {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+    }
+
+    .brand-name {
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+
+    .brand-tagline {
+      color: rgba(255, 255, 255, 0.35);
+      font-size: 11px;
+      margin-top: 4px;
+      font-weight: 400;
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-glow"></div>
+  <div class="bg-glow-2"></div>
+
+  <div class="container">
+    <!-- 左侧应用 -->
+    <div class="app-section">
+      <div class="app-icon"></div>
+      <span class="app-label">LTools.app</span>
+    </div>
+
+    <!-- 中间箭头 -->
+    <div class="arrow-section">
+      <div class="arrow"></div>
+      <span class="drag-text">Drag to Install</span>
+    </div>
+
+    <!-- 右侧 Applications -->
+    <div class="apps-section">
+      <div class="apps-icon">
+        <div class="folder">
+          <div class="folder-tab"></div>
+          <div class="folder-body"></div>
+        </div>
+      </div>
+      <span class="apps-label">Applications</span>
+    </div>
+  </div>
+
+  <div class="brand">
+    <div class="brand-name">LTOOLS</div>
+    <div class="brand-tagline">Developer Toolkit</div>
+  </div>
+</body>
+</html>

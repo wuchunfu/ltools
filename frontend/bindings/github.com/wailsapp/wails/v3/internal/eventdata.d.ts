@@ -39,6 +39,7 @@ declare module "@wailsio/runtime" {
             "datetime:time": string;
             "datetime:weekday": string;
             "datetime:year": number;
+            "file:open": string;
             "hosts:backup:created": string;
             "hosts:backup:deleted": string;
             "hosts:backup:restored": string;
@@ -123,6 +124,7 @@ declare module "@wailsio/runtime" {
             "tunnel:url": any;
             "update:available": update$0.UpdateInfo | null;
             "update:progress": number;
+            "url:open": { [_ in string]?: string };
         }
     }
 }

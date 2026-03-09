@@ -78,6 +78,35 @@ func (s *MarkdownService) ImportFile() (*ImportFileResult, error) {
 	}, nil
 }
 
+// OpenFileAtPath 打开指定路径的 Markdown 文件（用于文件关联）
+func (s *MarkdownService) OpenFileAtPath(filePath string) (*ImportFileResult, error) {
+	if s.app == nil {
+		return nil, os.ErrInvalid
+	}
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// 提取文件名
+	filename := filePath
+	if idx := len(filePath) - 1; idx > 0 {
+		for i := idx; i >= 0; i-- {
+			if filePath[i] == '/' || filePath[i] == '\\' {
+				filename = filePath[i+1:]
+				break
+			}
+		}
+	}
+
+	return &ImportFileResult{
+		FilePath: filePath,
+		Content:  string(data),
+		Filename: filename,
+	}, nil
+}
+
 // SaveFile 保存 Markdown 文件
 func (s *MarkdownService) SaveFile(content string, defaultFilename string) (filePath string, err error) {
 	if s.app == nil {

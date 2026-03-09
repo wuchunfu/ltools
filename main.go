@@ -204,6 +204,12 @@ func init() {
 	// Register custom events for the update service
 	application.RegisterEvent[*update.UpdateInfo]("update:available")
 	application.RegisterEvent[int]("update:progress")
+
+	// Register custom event for file open (file association)
+	application.RegisterEvent[string]("file:open")
+
+	// Register custom event for URL open (custom protocol)
+	application.RegisterEvent[map[string]string]("url:open")
 }
 
 // main function serves as the application's entry point. It initializes the application, creates a window,
@@ -254,6 +260,36 @@ func main() {
 
 	// 设置 proxyHandler 的 app 引用，用于访问环境信息
 	proxyHandler.SetApp(app)
+
+	// 监听文件打开事件（文件关联）
+	app.Event.OnApplicationEvent(events.Common.ApplicationOpenedWithFile, func(e *application.ApplicationEvent) {
+		filePath := e.Context().Filename()
+		log.Printf("[Main] File opened via association: %s", filePath)
+		// 发送事件到前端，让前端处理文件打开
+		app.Event.Emit("file:open", filePath)
+	})
+
+	// 监听 URL 打开事件（自定义协议 ltools://）
+	app.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(e *application.ApplicationEvent) {
+		url := e.Context().URL()
+		log.Printf("[Main] URL opened via custom protocol: %s", url)
+
+		// 解析 ltools:// 协议 URL
+		// 支持格式:
+		// - ltools://settings?tab=about
+		// - ltools://plugins/{pluginId}?param=xxx
+		// - ltools://search?q=keyword
+		if len(url) > 9 && url[:9] == "ltools://" {
+			path := url[9:] // 移除 "ltools://" 前缀
+			log.Printf("[Main] Parsed ltools URL path: %s", path)
+
+			// 发送事件到前端，让前端处理导航
+			app.Event.Emit("url:open", map[string]string{
+				"url":  url,
+				"path": path,
+			})
+		}
+	})
 
 	// 创建系统托盘
 	systray := app.SystemTray.New()

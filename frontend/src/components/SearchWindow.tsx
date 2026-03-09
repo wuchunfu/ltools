@@ -88,11 +88,13 @@ export function SearchWindow() {
 
   // 自动聚焦输入框
   useEffect(() => {
-    const unsubscribeOpened = Events.On('search:opened', () => {
-      console.log('[SearchWindow] Search opened event received');
+    const unsubscribeOpened = Events.On('search:opened', (ev: any) => {
+      const queryParam = ev.data as string;
+      console.log('[SearchWindow] Search opened event received, query:', queryParam);
       setTimeout(() => {
         inputRef.current?.focus();
-        setQuery('');
+        // 如果有查询参数，使用它；否则重置为空
+        setQuery(queryParam || '');
         setResults([]);
         setSelectedIndex(0);
         setCurrentPage(0); // 重置到第一页

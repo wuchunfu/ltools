@@ -17,6 +17,7 @@ function configure() {
     Object.freeze(Object.assign($Create.Events, {
         "search:results": $$createType2,
         "update:available": $$createType4,
+        "url:open": $$createType5,
     }));
 }
 
@@ -26,5 +27,6 @@ const $$createType1 = $Create.Nullable($$createType0);
 const $$createType2 = $Create.Array($$createType1);
 const $$createType3 = update$0.UpdateInfo.createFrom;
 const $$createType4 = $Create.Nullable($$createType3);
+const $$createType5 = $Create.Map($Create.Any, $Create.Any);
 
 configure();

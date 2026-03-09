@@ -220,3 +220,66 @@ tasks:
         msg: "SIGN_IDENTITY is required. Set it in the vars section at the top of build/darwin/Taskfile.yml"
       - sh: '[ -n "{{.KEYCHAIN_PROFILE}}" ]'
         msg: "KEYCHAIN_PROFILE is required. Set it in the vars section at the top of build/darwin/Taskfile.yml"
+
+  create:dmg:
+    summary: Creates a DMG installer for macOS
+    desc: |
+      Creates a drag-and-drop DMG installer.
+      Supports custom background and layout via build/darwin/dmg/ directory.
+    deps:
+      - task: package
+    cmds:
+      - |
+        if ! command -v create-dmg > /dev/null 2>&1; then
+          echo "create-dmg not found, installing via Homebrew..."
+          brew install create-dmg
+        fi
+      - |
+        mkdir -p {{.BIN_DIR}}
+      - |
+        if [ -d "build/darwin/dmg" ]; then
+          echo "Using custom DMG assets from build/darwin/dmg/"
+          create-dmg \
+            --volname "LTools Installer" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "{{.APP_NAME}}.app" 200 185 \
+            --app-drop-link 600 185 \
+            --background build/darwin/dmg/background.png \
+            "{{.BIN_DIR}}/{{.APP_NAME}}.dmg" \
+            "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+        else
+          echo "Using default DMG layout"
+          create-dmg \
+            --volname "LTools Installer" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "{{.APP_NAME}}.app" 200 185 \
+            --app-drop-link 600 185 \
+            "{{.BIN_DIR}}/{{.APP_NAME}}.dmg" \
+            "{{.BIN_DIR}}/{{.APP_NAME}}.app"
+        fi
+      - |
+        echo "DMG created: {{.BIN_DIR}}/{{.APP_NAME}}.dmg"
+
+  package:dmg:
+    summary: Complete macOS packaging (signed DMG with notarization)
+    desc: |
+      Full macOS distribution workflow:
+      1. Build and package .app bundle
+      2. Sign and notarize the .app
+      3. Create DMG with custom branding
+      4. Sign and notarize the DMG
+
+      Requires: SIGN_IDENTITY and KEYCHAIN_PROFILE to be set
+    cmds:
+      - task: sign:notarize
+      - task: create:dmg
+      - |
+        # 签名 DMG（可选，但推荐）
+        if [ -n "{{.SIGN_IDENTITY}}" ]; then
+          echo "Signing DMG..."
+          codesign --sign "{{.SIGN_IDENTITY}}" --force "{{.BIN_DIR}}/{{.APP_NAME}}.dmg"
+        fi

@@ -14,7 +14,7 @@
     !define INFO_PRODUCTNAME "LTools"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "0.1.0"
+    !define INFO_PRODUCTVERSION "0.1.3"
 !endif
 !ifndef INFO_COPYRIGHT
     !define INFO_COPYRIGHT "(c) 2025, LTools"
@@ -204,10 +204,22 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
 !macro wails.associateFiles
     ; Create file associations
     
+    !insertmacro APP_ASSOCIATE "md" "Markdown" "Markdown 文档" "$INSTDIR\markdownFileIcon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+    File "..\markdownFileIcon.ico"
+    
+    !insertmacro APP_ASSOCIATE "markdown" "Markdown" "Markdown 文档" "$INSTDIR\markdownFileIcon.ico" "Open with ${INFO_PRODUCTNAME}" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+    File "..\markdownFileIcon.ico"
+    
 !macroend
 
 !macro wails.unassociateFiles
     ; Delete app associations
+    
+    !insertmacro APP_UNASSOCIATE "md" "Markdown"
+    Delete "$INSTDIR\markdownFileIcon.ico"
+    
+    !insertmacro APP_UNASSOCIATE "markdown" "Markdown"
+    Delete "$INSTDIR\markdownFileIcon.ico"
     
 !macroend
 
@@ -228,9 +240,13 @@ RequestExecutionLevel "${REQUEST_EXECUTION_LEVEL}"
 !macro wails.associateCustomProtocols
     ; Create custom protocols associations
     
+      !insertmacro CUSTOM_PROTOCOL_ASSOCIATE "ltools" "LTools 自定义协议" "$INSTDIR\${PRODUCT_EXECUTABLE},0" "$INSTDIR\${PRODUCT_EXECUTABLE} $\"%1$\""
+    
 !macroend
 
 !macro wails.unassociateCustomProtocols
     ; Delete app custom protocol associations
+    
+      !insertmacro CUSTOM_PROTOCOL_UNASSOCIATE "ltools"
     
 !macroend

@@ -132,6 +132,21 @@ func (s *SearchWindowService) Show() error {
 	return nil
 }
 
+// ShowWithQuery shows the search window with a pre-filled query
+func (s *SearchWindowService) ShowWithQuery(query string) error {
+	s.app.Logger.Info(fmt.Sprintf("[SearchWindowService] Showing search window with query: %s", query))
+
+	// First show the window
+	if err := s.Show(); err != nil {
+		return err
+	}
+
+	// Emit event to frontend with the query
+	s.app.Event.Emit("search:opened", query)
+
+	return nil
+}
+
 // Hide hides the search window
 func (s *SearchWindowService) Hide() error {
 	s.mu.Lock()

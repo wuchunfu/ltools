@@ -10,4 +10,4 @@ Icon=ltools
 Categories=Utility;
 StartupWMClass=ltools
 
- 
+MimeType=x-scheme-handler/ltools; 

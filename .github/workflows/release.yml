@@ -177,15 +177,70 @@ jobs:
       - name: Build and package application
         run: wails3 package
 
+      - name: Cache Homebrew create-dmg (macOS)
+        if: matrix.goos == 'darwin'
+        id: cache-create-dmg
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew/create-dmg--*
+            /opt/homebrew/Cellar/create-dmg
+          key: ${{ runner.os }}-create-dmg-v1
+          restore-keys: |
+            ${{ runner.os }}-create-dmg-
+
+      - name: Install create-dmg (macOS)
+        if: matrix.goos == 'darwin'
+        run: |
+          # 如果已缓存，尝试重新链接；否则安装
+          if [ -d "/opt/homebrew/Cellar/create-dmg" ]; then
+            echo "Restoring create-dmg from cache..."
+            brew link create-dmg 2>/dev/null || brew install create-dmg
+          else
+            echo "Installing create-dmg..."
+            brew install create-dmg
+          fi
+          # 验证安装
+          create-dmg --version || echo "create-dmg ready"
+
       - name: Prepare release (macOS)
         if: matrix.goos == 'darwin'
         run: |
-          # macOS: .app bundle (tar.gz)
           ARCH="${{ matrix.arch }}"
           if [ -z "$ARCH" ]; then
             ARCH="$(uname -m)"
           fi
-          tar czf ltools-${{ github.ref_name }}-${{ matrix.goos }}-${ARCH}.tar.gz -C bin LTools.app
+
+          # 创建 DMG 安装包
+          if command -v create-dmg &> /dev/null; then
+            echo "Creating DMG installer..."
+            if [ -d "build/darwin/dmg" ]; then
+              create-dmg \
+                --volname "LTools Installer" \
+                --window-pos 200 120 \
+                --window-size 800 400 \
+                --icon-size 100 \
+                --icon "LTools.app" 200 185 \
+                --app-drop-link 600 185 \
+                --background build/darwin/dmg/background.png \
+                "ltools-${{ github.ref_name }}-${{ matrix.goos }}-${ARCH}.dmg" \
+                "bin/LTools.app"
+            else
+              create-dmg \
+                --volname "LTools Installer" \
+                --window-pos 200 120 \
+                --window-size 800 400 \
+                --icon-size 100 \
+                --icon "LTools.app" 200 185 \
+                --app-drop-link 600 185 \
+                "ltools-${{ github.ref_name }}-${{ matrix.goos }}-${ARCH}.dmg" \
+                "bin/LTools.app"
+            fi
+            echo "✓ DMG created successfully"
+          else
+            echo "⚠ create-dmg not available, falling back to tar.gz"
+            tar czf ltools-${{ github.ref_name }}-${{ matrix.goos }}-${ARCH}.tar.gz -C bin LTools.app
+          fi
 
       - name: Prepare release (Windows)
         if: matrix.goos == 'windows'
@@ -246,6 +301,7 @@ jobs:
             *.AppImage
             *.deb
             *.rpm
+            *.dmg
 
   create-release:
     needs: build
@@ -263,7 +319,7 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release
-          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "update.json" \) -exec cp {} release/ \;
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "*.dmg" -o -name "update.json" \) -exec cp {} release/ \;
           ls -lh release/
 
       - name: Generate update manifest

@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Editor, { Monaco } from '@monaco-editor/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -25,6 +26,9 @@ const STORAGE_KEY_FILENAME = 'markdown-editor-draft-filename';
  * Markdown 编辑器主组件
  */
 export function MarkdownWidget(): JSX.Element {
+  const [searchParams] = useSearchParams();
+  const fileToOpen = searchParams.get('file'); // 从 URL 获取文件路径
+
   // 从 localStorage 恢复暂存内容
   const [markdownText, setMarkdownText] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEY_CONTENT);
@@ -40,6 +44,31 @@ export function MarkdownWidget(): JSX.Element {
   const syncScrollRef = useRef<boolean>(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
+
+  // 当有文件路径参数时，自动加载文件
+  useEffect(() => {
+    if (fileToOpen) {
+      const loadFile = async () => {
+        try {
+          console.log('[MarkdownWidget] Loading file from path:', fileToOpen);
+
+          // 使用后端服务读取指定路径的文件
+          const result = await MarkdownService.OpenFileAtPath(fileToOpen);
+
+          if (result) {
+            setMarkdownText(result.content);
+            setFilename(result.filename);
+            console.log('[MarkdownWidget] File loaded successfully:', result.filePath);
+          } else {
+            console.warn('[MarkdownWidget] OpenFileAtPath returned null');
+          }
+        } catch (err) {
+          console.error('[MarkdownWidget] Failed to load file:', err);
+        }
+      };
+      loadFile();
+    }
+  }, [fileToOpen]);
 
   // 保持 ref 与 state 同步
   useEffect(() => {
