@@ -201,6 +201,7 @@ ltools/
 
 | 平台 | 文件 | 说明 |
 |------|------|------|
+| **macOS** (ARM64) | `ltools-*-darwin-arm64.dmg` | DMG 安装包 (推荐) |
 | **macOS** (ARM64) | `ltools-*-darwin-arm64.tar.gz` | Apple Silicon (M1/M2/M3) |
 | **macOS** (AMD64) | `ltools-*-darwin-amd64.tar.gz` | Intel Mac |
 | **Windows** | `ltools-*-windows-amd64-installer.exe` | NSIS 安装程序 |
@@ -222,7 +223,22 @@ ltools/
 
 详细安装说明请查看 [Release 页面](https://github.com/lian-yang/ltools/releases) 或 [RELEASE.md](RELEASE.md)。
 
-**macOS 快速安装：**
+**macOS 快速安装（DMG 推荐）：**
+```bash
+# 1. 下载 DMG（以 v1.0.0 为例）
+curl -LO https://github.com/lian-yang/ltools/releases/download/v1.0.0/ltools-v1.0.0-darwin-arm64.dmg
+
+# 2. 打开 DMG 并拖拽安装
+open ltools-v1.0.0-darwin-arm64.dmg
+
+# 3. 移除隔离属性（重要！）
+sudo xattr -rd com.apple.quarantine /Applications/LTools.app
+
+# 4. 启动
+open /Applications/LTools.app
+```
+
+**macOS tar.gz 安装：**
 ```bash
 # 1. 下载（以 v1.0.0 为例）
 curl -LO https://github.com/lian-yang/ltools/releases/download/v1.0.0/ltools-v1.0.0-darwin-arm64.tar.gz

@@ -118,7 +118,7 @@ open https://github.com/lian-yang/ltools/actions
 GitHub Actions 会自动执行以下步骤：
 
 1. **构建阶段**（并行，约 5-8 分钟）
-   - macOS (ARM64): 构建 .app bundle
+   - macOS (ARM64): 构建 .app bundle + DMG 安装包
    - Windows (x64): 构建 NSIS 安装程序
    - Linux (x64): 构建 AppImage、DEB、RPM
 
@@ -233,9 +233,12 @@ git tag -a v1.0.0 -m "## 新功能
 ### 下载地址
 | 平台 | 文件 |
 |------|------|
-| macOS | ltools-{{VERSION}}-darwin-arm64.tar.gz |
+| macOS (DMG) | ltools-{{VERSION}}-darwin-arm64.dmg |
+| macOS (tar.gz) | ltools-{{VERSION}}-darwin-arm64.tar.gz |
 | Windows | ltools-{{VERSION}}-windows-amd64-installer.exe |
-| Linux | ltools-{{VERSION}}-linux-amd64.AppImage |
+| Linux (AppImage) | ltools-{{VERSION}}-linux-amd64.AppImage |
+| Linux (DEB) | ltools-{{VERSION}}-linux-amd64.deb |
+| Linux (RPM) | ltools-{{VERSION}}-linux-amd64.rpm |
 
 ### 新功能
 ...

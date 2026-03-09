@@ -18,6 +18,7 @@
 
 | 平台 | 架构 | 文件名 | 大小 | 格式 |
 |------|------|--------|------|------|
+| **macOS** | ARM64 (M1/M2/M3) | `ltools-{{VERSION}}-darwin-arm64.dmg` | ~10 MB | DMG 安装包 (推荐) |
 | **macOS** | ARM64 (M1/M2/M3) | `ltools-{{VERSION}}-darwin-arm64.tar.gz` | ~50 MB | .app bundle |
 | **macOS** | AMD64 (Intel) | `ltools-{{VERSION}}-darwin-amd64.tar.gz` | ~50 MB | .app bundle |
 | **Windows** | x64 | `ltools-{{VERSION}}-windows-amd64-installer.exe` | ~55 MB | NSIS 安装程序 |
@@ -71,6 +72,26 @@ brew install node
 
 #### 2. 安装 LTools
 
+**方式 A: DMG 安装包（推荐）**
+
+```bash
+# 下载 DMG
+# ARM64 (Apple Silicon - M1/M2/M3):
+curl -LO https://github.com/{{REPO}}/releases/download/{{VERSION}}/ltools-{{VERSION}}-darwin-arm64.dmg
+
+# 打开 DMG
+open ltools-{{VERSION}}-darwin-arm64.dmg
+
+# 在打开的窗口中，将 LTools 拖拽到 Applications 文件夹
+# 或使用命令行：
+cp -R /Volumes/LTools\ Installer/LTools.app /Applications/
+
+# 卸载 DMG
+hdiutil detach /Volumes/LTools\ Installer
+```
+
+**方式 B: tar.gz 压缩包**
+
 ```bash
 # 下载对应架构的压缩包
 # ARM64 (Apple Silicon - M1/M2/M3):
@@ -84,6 +105,7 @@ tar xzf ltools-{{VERSION}}-darwin-*.tar.gz
 
 # 安装到 Applications
 mv LTools.app /Applications/
+```
 
 # 启动
 open /Applications/LTools.app
