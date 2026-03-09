@@ -124,7 +124,6 @@ check_and_add_platform() {
   fi
 }
 
-check_and_add_platform "darwin-arm64" "dmg"
 check_and_add_platform "darwin-arm64" "tar.gz"
 check_and_add_platform "darwin-amd64" "tar.gz"
 check_and_add_platform "windows-amd64-installer" "exe"
