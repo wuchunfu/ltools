@@ -1,23 +1,23 @@
 {
-  "version": "0.1.4",
-  "releaseDate": "2026-03-09T05:50:32Z",
-  "releaseNotes": "fix: 修复搜索窗口打开时 URL 协议导航无响应问题\n\n问题：当搜索窗口处于前台时，通过 ltools://settings?tab=about 等 URL\n调用无法正确切换页面，因为主窗口没有获得焦点。\n\n解决方案：\n1. 在 SearchWindowService 添加 IsVisible() 方法\n2. 修改 main.go 中的 URL 事件处理，在发送事件前先：\n   - 检查搜索窗口是否可见，如可见则隐藏\n   - 显示并聚焦主窗口\n3. 将 URL 事件监听移至 SearchWindowService 创建之后，\n   以便使用其方法\n\n修复文件：\n- internal/plugins/search_window_service.go: 添加 IsVisible 方法\n- main.go: 重构 URL 事件处理逻辑，添加窗口焦点管理",
+  "version": "0.1.5",
+  "releaseDate": "2026-03-13T10:44:24Z",
+  "releaseNotes": "chore: 更新版本号到 v0.1.5",
   "mandatory": false,
   "platforms": {
     "darwin-arm64": {
-      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.4/ltools-v0.1.4-darwin-arm64.tar.gz",
-      "size": 9369990,
-      "checksum": "sha256:c9e49ae065d883527e6da560b10ea8e00a614135235a51e76a7b21fc6ad73ab5"
+      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.5/ltools-v0.1.5-darwin-arm64.tar.gz",
+      "size": 10439696,
+      "checksum": "sha256:f5d96709dc2c264050713a94a4d9f562d5f787d84f45e8fd6d2a0422af792f2a"
     },
     "windows-amd64": {
-      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.4/ltools-v0.1.4-windows-amd64-installer.exe",
-      "size": 13594355,
-      "checksum": "sha256:30bd3654a24ffdc7a5364ea27c363e6d9153246d83a79ba6b90f88803f3cc571"
+      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.5/ltools-v0.1.5-windows-amd64-installer.exe",
+      "size": 14848423,
+      "checksum": "sha256:7c78411351859818f858ea9c322d8f8912345a615713e583813e2027b44ec32e"
     },
     "linux-amd64": {
-      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.4/ltools-v0.1.4-linux-amd64.AppImage",
-      "size": 79575544,
-      "checksum": "sha256:8c2bb2e8f4709b8212fce1a90d8c08fd0605897e3f1c5e2f956283f3a32a975b"
+      "url": "https://github.com/lian-yang/ltools/releases/download/v0.1.5/ltools-v0.1.5-linux-amd64.AppImage",
+      "size": 80665080,
+      "checksum": "sha256:58dc5c430974c6315044ecad2f54f3e96145925d0188d78374f19b25fd0589ce"
     }
   }
 }
