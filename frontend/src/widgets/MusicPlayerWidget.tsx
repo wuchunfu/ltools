@@ -12,7 +12,6 @@ export function MusicPlayerWidget() {
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLiked, setIsLiked] = useState(false);
     const [searchKeyword, setSearchKeyword] = useState('');
-    const [showSearch, setShowSearch] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [progress, setProgress] = useState(0);
     const [duration, setDuration] = useState(0);
@@ -31,6 +30,23 @@ export function MusicPlayerWidget() {
     const [hasMoreResults, setHasMoreResults] = useState(true); // 是否还有更多结果
     const [isLoadingMore, setIsLoadingMore] = useState(false); // 是否正在加载更多
 
+    // 视图模式状态
+    type ViewMode = 'player' | 'search' | 'likes' | 'hot';
+    const [viewMode, setViewMode] = useState<ViewMode>('player');
+
+    // 喜欢列表状态
+    const [likedSongs, setLikedSongs] = useState<Array<{song: Song, liked_at: string}>>([]);
+    const [likesPage, setLikesPage] = useState(1);
+    const [hasMoreLikes, setHasMoreLikes] = useState(true);
+    const [isLoadingLikes, setIsLoadingLikes] = useState(false);
+    const [likesTotal, setLikesTotal] = useState(0);
+
+    // 热门歌曲状态
+    const [hotSongs, setHotSongs] = useState<Song[]>([]);
+    const [hotPage, setHotPage] = useState(1);
+    const [hasMoreHot, setHasMoreHot] = useState(true);
+    const [isLoadingHot, setIsLoadingHot] = useState(false);
+
     // 下载状态
     const [isDownloading, setIsDownloading] = useState(false); // 当前歌曲下载状态
     const [downloadingSongs, setDownloadingSongs] = useState<Set<string>>(new Set()); // 搜索列表下载状态
@@ -45,6 +61,8 @@ export function MusicPlayerWidget() {
     const lyricsContainerRef = useRef<HTMLDivElement>(null);
     const lastScrollTimeRef = useRef<number>(0); // 上次滚动时间
     const searchResultsRef = useRef<HTMLDivElement>(null); // 搜索结果容器引用
+    const likesListRef = useRef<HTMLDivElement>(null);
+    const hotListRef = useRef<HTMLDivElement>(null);
 
     // 更新最新的进度和歌词（不触发重渲染）
     useEffect(() => {
@@ -78,7 +96,7 @@ export function MusicPlayerWidget() {
     // 搜索结果滚动监听 - 自动加载更多
     useEffect(() => {
         const container = searchResultsRef.current;
-        if (!container || !showSearch) return;
+        if (!container || viewMode !== 'search') return;
 
         const handleScroll = () => {
             const { scrollTop, scrollHeight, clientHeight } = container;
@@ -90,7 +108,51 @@ export function MusicPlayerWidget() {
 
         container.addEventListener('scroll', handleScroll);
         return () => container.removeEventListener('scroll', handleScroll);
-    }, [showSearch, searchKeyword, searchPage, hasMoreResults, isLoadingMore]);
+    }, [viewMode, searchKeyword, searchPage, hasMoreResults, isLoadingMore]);
+
+    // 喜欢列表滚动监听
+    useEffect(() => {
+        const container = likesListRef.current;
+        if (!container || viewMode !== 'likes') return;
+
+        const handleScroll = () => {
+            const { scrollTop, scrollHeight, clientHeight } = container;
+            if (scrollHeight - scrollTop - clientHeight < 100 && hasMoreLikes && !isLoadingLikes) {
+                loadLikedSongs(likesPage + 1);
+            }
+        };
+
+        container.addEventListener('scroll', handleScroll);
+        return () => container.removeEventListener('scroll', handleScroll);
+    }, [viewMode, likesPage, hasMoreLikes, isLoadingLikes]);
+
+    // 热门歌曲滚动监听
+    useEffect(() => {
+        const container = hotListRef.current;
+        if (!container || viewMode !== 'hot') return;
+
+        const handleScroll = () => {
+            const { scrollTop, scrollHeight, clientHeight } = container;
+            if (scrollHeight - scrollTop - clientHeight < 100 && hasMoreHot && !isLoadingHot) {
+                loadHotSongs(hotPage + 1);
+            }
+        };
+
+        container.addEventListener('scroll', handleScroll);
+        return () => container.removeEventListener('scroll', handleScroll);
+    }, [viewMode, hotPage, hasMoreHot, isLoadingHot]);
+
+    // ESC 键关闭列表页
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && (viewMode === 'likes' || viewMode === 'hot' || viewMode === 'search')) {
+                setViewMode('player');
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [viewMode]);
 
     // 更新进度
     useEffect(() => {
@@ -653,6 +715,153 @@ export function MusicPlayerWidget() {
         }
     };
 
+    // 格式化时间（显示"X分钟前"、"X小时前"、"X天前"）
+    const formatTimeAgo = (dateString: string): string => {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return '刚刚';
+        if (diffMins < 60) return `${diffMins}分钟前`;
+        if (diffHours < 24) return `${diffHours}小时前`;
+        if (diffDays < 7) return `${diffDays}天前`;
+
+        return date.toLocaleDateString('zh-CN');
+    };
+
+    // 加载喜欢列表
+    const loadLikedSongs = async (page: number = 1) => {
+        if (isLoadingLikes) return;
+
+        setIsLoadingLikes(true);
+        try {
+            const result = await MusicPlayerService.GetLikeListPaginated(page, 20);
+
+            if (!result) return;
+
+            if (page === 1) {
+                setLikedSongs(result.songs);
+            } else {
+                setLikedSongs(prev => [...prev, ...result.songs]);
+            }
+
+            setLikesPage(page);
+            setHasMoreLikes(result.has_more);
+            setLikesTotal(result.total);
+
+            // 预加载封面
+            await Promise.all(result.songs.map(async (item) => {
+                if (!songCovers.has(item.song.id)) {
+                    const picURL = await MusicPlayerService.GetPicURL(item.song.pic_id);
+                    setSongCovers(prev => new Map(prev).set(item.song.id, picURL));
+                }
+            }));
+        } catch (error) {
+            console.error('加载喜欢列表失败:', error);
+            toast.error('加载失败');
+        } finally {
+            setIsLoadingLikes(false);
+        }
+    };
+
+    // 加载热门歌曲
+    const loadHotSongs = async (page: number = 1) => {
+        if (isLoadingHot) return;
+
+        setIsLoadingHot(true);
+        try {
+            const result = await MusicPlayerService.GetHotSongs(page, 20);
+
+            if (!result) return;
+
+            if (page === 1) {
+                setHotSongs(result.songs);
+            } else {
+                setHotSongs(prev => [...prev, ...result.songs]);
+            }
+
+            setHotPage(page);
+            setHasMoreHot(result.has_more);
+
+            // 预加载封面
+            await Promise.all(result.songs.map(async (song) => {
+                if (!songCovers.has(song.id)) {
+                    const picURL = await MusicPlayerService.GetPicURL(song.pic_id);
+                    setSongCovers(prev => new Map(prev).set(song.id, picURL));
+                }
+            }));
+        } catch (error) {
+            console.error('加载热门歌曲失败:', error);
+            toast.error('加载失败');
+        } finally {
+            setIsLoadingHot(false);
+        }
+    };
+
+    // 播放整个喜欢列表
+    const playAllLiked = async () => {
+        try {
+            const songs = await MusicPlayerService.PlayLikeList();
+            if (songs.length === 0) {
+                toast.warning('喜欢列表为空');
+                return;
+            }
+
+            setSongs(songs);
+            setCurrentIndex(0);
+            await playSong(songs[0]);
+            setViewMode('player'); // 切回播放器视图
+            toast.success(`开始播放 ${songs.length} 首喜欢的歌曲`);
+        } catch (error) {
+            console.error('播放失败:', error);
+            toast.error('播放失败');
+        }
+    };
+
+    // 播放热门歌曲
+    const playAllHot = async () => {
+        try {
+            const songs = await MusicPlayerService.PlayHotSongs();
+            if (songs.length === 0) {
+                toast.warning('暂无热门歌曲');
+                return;
+            }
+
+            setSongs(songs);
+            setCurrentIndex(0);
+            await playSong(songs[0]);
+            setViewMode('player');
+            toast.success(`开始播放 ${songs.length} 首热门歌曲`);
+        } catch (error) {
+            console.error('播放失败:', error);
+            toast.error('播放失败');
+        }
+    };
+
+    // 取消喜欢（从列表中移除）
+    const handleRemoveFromLikes = async (songId: string) => {
+        try {
+            await MusicPlayerService.RemoveFromLikes(songId);
+
+            // 从列表中移除
+            setLikedSongs(prev => prev.filter(item => item.song.id !== songId));
+            setLikesTotal(prev => prev - 1);
+
+            // 如果当前播放的歌曲被取消喜欢，更新状态
+            if (currentSong?.id === songId) {
+                setIsLiked(false);
+            }
+
+            toast.success('已取消喜欢');
+        } catch (error) {
+            console.error('取消喜欢失败:', error);
+            toast.error('操作失败');
+        }
+    };
+
     // 下载当前歌曲
     const handleDownloadCurrentSong = async () => {
         if (!currentSong) return;
@@ -758,6 +967,36 @@ export function MusicPlayerWidget() {
             <div className="vinyl-player">
                 {/* 背景装饰 */}
                 <div className="vinyl-bg-glow" />
+
+                {/* 顶部按钮组 - 绝对定位 */}
+                {viewMode === 'player' && (
+                    <div className="vinyl-top-group">
+                        <button
+                            onClick={() => {
+                                setViewMode('likes');
+                                if (likedSongs.length === 0) loadLikedSongs(1);
+                            }}
+                            className="vinyl-top-group-btn"
+                        >
+                            <Icon name="heart" size={16} />
+                            <span>喜欢</span>
+                            {likesTotal > 0 && <span className="vinyl-badge">{likesTotal}</span>}
+                        </button>
+
+                        <span className="vinyl-top-divider">·</span>
+
+                        <button
+                            onClick={() => {
+                                setViewMode('hot');
+                                if (hotSongs.length === 0) loadHotSongs(1);
+                            }}
+                            className="vinyl-top-group-btn"
+                        >
+                            <Icon name="fire" size={16} />
+                            <span>热门</span>
+                        </button>
+                    </div>
+                )}
 
                 {/* 主容器 */}
                 <div className="vinyl-container" style={{ '--wails-draggable': 'drag' } as React.CSSProperties}>
@@ -922,26 +1161,183 @@ export function MusicPlayerWidget() {
                         </button>
 
                         <button
-                            onClick={() => setShowSearch(!showSearch)}
+                            onClick={() => {
+                                if (viewMode === 'search') {
+                                    setViewMode('player');
+                                } else {
+                                    setViewMode('search');
+                                }
+                            }}
                             className="vinyl-btn vinyl-btn-secondary"
-                            title={showSearch ? '关闭搜索' : '搜索'}
+                            title={viewMode === 'search' ? '关闭搜索' : '搜索'}
                         >
-                            <Icon name={showSearch ? 'x' : 'search'} size={20} />
+                            <Icon name={viewMode === 'search' ? 'x' : 'search'} size={20} />
                         </button>
                     </div>
                 </div>
 
-                {/* 搜索面板 */}
-                {showSearch && (
-                    <div className="vinyl-search-overlay">
-                        <div className="vinyl-search-panel">
+                {/* 喜欢列表视图 */}
+                {viewMode === 'likes' && (
+                    <div className="vinyl-list-view" ref={likesListRef}>
+                        {/* 一键播放按钮 */}
+                        <div className="vinyl-list-header">
                             <button
-                                onClick={() => setShowSearch(false)}
-                                className="vinyl-search-close"
+                                onClick={playAllLiked}
+                                className="vinyl-play-all-btn"
+                                disabled={likedSongs.length === 0}
                             >
-                                <Icon name="x" size={16} />
+                                <Icon name="play" size={16} />
+                                播放全部 ({likesTotal})
                             </button>
+                        </div>
 
+                        {/* 歌曲列表 */}
+                        {likedSongs.map((item, index) => {
+                            const coverUrl = songCovers.get(item.song.id);
+
+                            return (
+                                <div key={`${item.song.id}-${index}`} className="vinyl-list-item">
+                                    <div
+                                        className="vinyl-list-item-main"
+                                        onClick={() => {
+                                            playSong(item.song);
+                                            setViewMode('player');
+                                        }}
+                                    >
+                                        {coverUrl ? (
+                                            <img src={coverUrl} alt={item.song.name} className="vinyl-list-cover" />
+                                        ) : (
+                                            <div className="vinyl-list-cover-placeholder">
+                                                <Icon name="sparkles" size={20} />
+                                            </div>
+                                        )}
+                                        <div className="vinyl-list-info">
+                                            <div className="vinyl-list-name">{item.song.name}</div>
+                                            <div className="vinyl-list-artist">{item.song.artist.join(', ')}</div>
+                                            <div className="vinyl-list-meta">
+                                                {formatTimeAgo(item.liked_at)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="vinyl-list-actions">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                playSong(item.song);
+                                            }}
+                                            title="播放"
+                                        >
+                                            <Icon name="play" size={16} />
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRemoveFromLikes(item.song.id);
+                                            }}
+                                            title="取消喜欢"
+                                            className="liked"
+                                        >
+                                            <Icon name="heart" size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+
+                        {/* 加载状态 */}
+                        {isLoadingLikes && (
+                            <div className="vinyl-list-loading">
+                                <div className="vinyl-loading-spinner" />
+                            </div>
+                        )}
+                        {!hasMoreLikes && likedSongs.length > 0 && (
+                            <div className="vinyl-list-end">已加载全部</div>
+                        )}
+                    </div>
+                )}
+
+                {/* 热门歌曲列表视图 */}
+                {viewMode === 'hot' && (
+                    <div className="vinyl-list-view" ref={hotListRef}>
+                        <div className="vinyl-list-header">
+                            <button onClick={playAllHot} className="vinyl-play-all-btn">
+                                <Icon name="play" size={16} />
+                                播放全部热门
+                            </button>
+                        </div>
+
+                        {/* 歌曲列表 */}
+                        {hotSongs.map((song, index) => {
+                            const coverUrl = songCovers.get(song.id);
+
+                            return (
+                                <div key={`${song.id}-${index}`} className="vinyl-list-item">
+                                    <div
+                                        className="vinyl-list-item-main"
+                                        onClick={() => {
+                                            playSong(song);
+                                            setViewMode('player');
+                                        }}
+                                    >
+                                        {coverUrl ? (
+                                            <img src={coverUrl} alt={song.name} className="vinyl-list-cover" />
+                                        ) : (
+                                            <div className="vinyl-list-cover-placeholder">
+                                                <Icon name="sparkles" size={20} />
+                                            </div>
+                                        )}
+                                        <div className="vinyl-list-info">
+                                            <div className="vinyl-list-name">{song.name}</div>
+                                            <div className="vinyl-list-artist">{song.artist.join(', ')}</div>
+                                        </div>
+                                    </div>
+                                    <div className="vinyl-list-actions">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                playSong(song);
+                                            }}
+                                            title="播放"
+                                        >
+                                            <Icon name="play" size={16} />
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDownloadSearchSong(song);
+                                            }}
+                                            title="下载"
+                                            disabled={downloadingSongs.has(song.id)}
+                                        >
+                                            {downloadingSongs.has(song.id) ? (
+                                                <Icon name="refresh-cw" size={16} className="animate-spin" />
+                                            ) : (
+                                                <Icon name="download" size={16} />
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+
+                        {/* 加载状态 */}
+                        {isLoadingHot && (
+                            <div className="vinyl-list-loading">
+                                <div className="vinyl-loading-spinner" />
+                            </div>
+                        )}
+                        {!hasMoreHot && hotSongs.length > 0 && (
+                            <div className="vinyl-list-end">已加载全部</div>
+                        )}
+                    </div>
+                )}
+
+                {/* 搜索面板 */}
+                {/* 搜索视图 */}
+                {viewMode === 'search' && (
+                    <div className="vinyl-list-view">
+                        {/* 搜索框 */}
+                        <div className="vinyl-list-header">
                             <div className="vinyl-search-input-wrapper">
                                 <Icon name="search" size={18} />
                                 <input
@@ -954,48 +1350,51 @@ export function MusicPlayerWidget() {
                                     autoFocus
                                 />
                             </div>
+                        </div>
 
-                            {songs.length > 0 && (
-                                <div className="vinyl-search-results" ref={searchResultsRef}>
-                                    {songs.map((song, index) => {
-                                        const coverUrl = songCovers.get(song.id);
+                        {/* 搜索结果 */}
+                        {songs.length > 0 && (
+                            <div ref={searchResultsRef}>
+                                {songs.map((song, index) => {
+                                    const coverUrl = songCovers.get(song.id);
 
-                                        return (
+                                    return (
+                                        <div key={`${song.id}-${index}`} className="vinyl-list-item">
                                             <div
-                                                key={`${song.id}-${index}`}
-                                                className="vinyl-search-item"
+                                                className="vinyl-list-item-main"
+                                                onClick={() => {
+                                                    playSong(song);
+                                                    setViewMode('player');
+                                                }}
                                             >
-                                                <div
-                                                    className="vinyl-search-item-main"
-                                                    onClick={() => {
-                                                        playSong(song);
-                                                        setShowSearch(false);
-                                                    }}
-                                                >
-                                                    {coverUrl ? (
-                                                        <img
-                                                            src={coverUrl}
-                                                            alt={song.name}
-                                                            className="vinyl-search-cover"
-                                                        />
-                                                    ) : (
-                                                        <div className="vinyl-search-cover-placeholder">
-                                                            <Icon name="sparkles" size={20} />
-                                                        </div>
-                                                    )}
-                                                    <div className="vinyl-search-info">
-                                                        <div className="vinyl-search-title">{song.name}</div>
-                                                        <div className="vinyl-search-artist">{song.artist.join(', ')}</div>
+                                                {coverUrl ? (
+                                                    <img src={coverUrl} alt={song.name} className="vinyl-list-cover" />
+                                                ) : (
+                                                    <div className="vinyl-list-cover-placeholder">
+                                                        <Icon name="sparkles" size={20} />
                                                     </div>
+                                                )}
+                                                <div className="vinyl-list-info">
+                                                    <div className="vinyl-list-name">{song.name}</div>
+                                                    <div className="vinyl-list-artist">{song.artist.join(', ')}</div>
                                                 </div>
-                                                {/* 下载按钮 */}
+                                            </div>
+                                            <div className="vinyl-list-actions">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        playSong(song);
+                                                    }}
+                                                    title="播放"
+                                                >
+                                                    <Icon name="play" size={16} />
+                                                </button>
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleDownloadSearchSong(song);
                                                     }}
-                                                    className="vinyl-search-download-btn"
-                                                    title="下载此歌曲"
+                                                    title="下载"
                                                     disabled={downloadingSongs.has(song.id)}
                                                 >
                                                     {downloadingSongs.has(song.id) ? (
@@ -1005,26 +1404,21 @@ export function MusicPlayerWidget() {
                                                     )}
                                                 </button>
                                             </div>
-                                        );
-                                    })}
-
-                                    {/* 加载更多指示器 */}
-                                    {isLoadingMore && (
-                                        <div className="vinyl-search-loading-more">
-                                            <div className="vinyl-loading-spinner"></div>
-                                            <span>加载中...</span>
                                         </div>
-                                    )}
+                                    );
+                                })}
 
-                                    {/* 没有更多结果提示 */}
-                                    {!hasMoreResults && songs.length > 0 && !isLoadingMore && (
-                                        <div className="vinyl-search-no-more">
-                                            已加载全部结果
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
+                                {/* 加载状态 */}
+                                {isLoadingMore && (
+                                    <div className="vinyl-list-loading">
+                                        <div className="vinyl-loading-spinner" />
+                                    </div>
+                                )}
+                                {!hasMoreResults && songs.length > 0 && !isLoadingMore && (
+                                    <div className="vinyl-list-end">已加载全部结果</div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -1074,7 +1468,7 @@ export function MusicPlayerWidget() {
                     flex-direction: column;
                     align-items: center;
                     gap: 24px;
-                    padding: 48px 40px 40px;
+                    padding: 88px 40px 40px;
                 }
 
                 /* 关闭按钮 */
@@ -1538,74 +1932,23 @@ export function MusicPlayerWidget() {
                     transform: none;
                 }
 
-                /* 搜索面板 */
-                .vinyl-search-overlay {
-                    position: absolute;
-                    inset: 0;
-                    background: rgba(0, 0, 0, 0.9);
-                    backdrop-filter: blur(10px);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    z-index: 100;
-                    animation: vinyl-fade-in 0.3s ease-out;
-                }
-
-                .vinyl-search-panel {
-                    width: 400px;
-                    max-width: 90vw;
-                    background: rgba(26, 26, 46, 0.95);
-                    border: 1px solid rgba(0, 255, 255, 0.3);
-                    border-radius: 20px;
-                    padding: 24px;
-                    box-shadow: 0 0 40px rgba(0, 255, 255, 0.3);
-                    position: relative;
-                    display: flex;
-                    flex-direction: column;
-                    overflow: hidden;
-                }
-
-                .vinyl-search-close {
-                    position: absolute;
-                    top: 16px;
-                    right: 16px;
-                    width: 32px;
-                    height: 32px;
-                    border-radius: 50%;
-                    background: rgba(255, 0, 128, 0.1);
-                    border: 1px solid rgba(255, 0, 128, 0.3);
-                    color: #ff0080;
-                    cursor: pointer;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    transition: all 0.3s;
-                    z-index:999;
-                }
-
-                .vinyl-search-close:hover {
-                    background: rgba(255, 0, 128, 0.2);
-                    border-color: rgba(255, 0, 128, 0.5);
-                    transform: rotate(90deg);
-                }
-
+                /* 搜索框样式 */
                 .vinyl-search-input-wrapper {
-                    position: relative;
-                    margin-bottom: 16px;
-                    color: rgba(0, 255, 255, 0.5);
                     display: flex;
                     align-items: center;
                     gap: 12px;
                     background: rgba(255, 255, 255, 0.05);
-                    border: 1px solid rgba(0, 255, 255, 0.2);
-                    border-radius: 12px;
-                    padding: 12px 16px;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 25px;
+                    padding: 12px 20px;
                     transition: all 0.3s;
+                    width: 100%;
+                    max-width: 400px;
                 }
 
                 .vinyl-search-input-wrapper:focus-within {
-                    border-color: rgba(0, 255, 255, 0.6);
-                    box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+                    border-color: rgba(255, 0, 128, 0.5);
+                    box-shadow: 0 0 20px rgba(255, 0, 128, 0.3);
                 }
 
                 .vinyl-search-input {
@@ -1615,136 +1958,195 @@ export function MusicPlayerWidget() {
                     outline: none;
                     color: white;
                     font-family: 'Rajdhani', sans-serif;
-                    font-size: 16px;
+                    font-size: 15px;
                     font-weight: 500;
                 }
 
                 .vinyl-search-input::placeholder {
-                    color: rgba(255, 255, 255, 0.3);
+                    color: rgba(255, 255, 255, 0.4);
                 }
 
-                .vinyl-search-results {
-                    max-height: 400px;
-                    overflow-y: auto;
-                    overflow-x: hidden;
-                    scrollbar-width: thin;
-                    scrollbar-color: rgba(0, 255, 255, 0.3) transparent;
-                    width: 100%;
-                    padding-right: 8px;
-                }
-
-                .vinyl-search-results::-webkit-scrollbar {
-                    width: 6px;
-                }
-
-                .vinyl-search-results::-webkit-scrollbar-track {
-                    background: transparent;
-                }
-
-                .vinyl-search-results::-webkit-scrollbar-thumb {
-                    background: rgba(0, 255, 255, 0.3);
-                    border-radius: 3px;
-                }
-
-                .vinyl-search-item {
+                /* 顶部按钮组 - 绝对定位 */
+                .vinyl-top-group {
+                    position: absolute;
+                    top: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
                     display: flex;
-                    gap: 12px;
-                    padding: 12px;
-                    border-radius: 12px;
-                    transition: all 0.2s;
-                    margin-bottom: 8px;
-                    background: rgba(255, 255, 255, 0.03);
-                    border: 1px solid rgba(255, 255, 255, 0.05);
-                    width: 100%;
-                    box-sizing: border-box;
-                    flex-shrink: 0;
                     align-items: center;
+                    gap: 0;
+                    z-index: 50;
+                    background: rgba(255, 255, 255, 0.08);
+                    backdrop-filter: blur(10px);
+                    border: 1px solid rgba(255, 0, 128, 0.3);
+                    border-radius: 16px;
+                    padding: 2px;
+                    box-shadow: 0 0 20px rgba(255, 0, 128, 0.2);
                 }
 
-                .vinyl-search-item-main {
+                .vinyl-top-group-btn {
                     display: flex;
-                    gap: 12px;
-                    flex: 1;
-                    cursor: pointer;
-                    min-width: 0;
-                }
-
-                .vinyl-search-item:hover {
-                    background: rgba(0, 255, 255, 0.1);
-                    border-color: rgba(0, 255, 255, 0.3);
-                    transform: translateX(4px);
-                    box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
-                }
-
-                .vinyl-search-download-btn {
-                    flex-shrink: 0;
-                    width: 32px;
-                    height: 32px;
+                    align-items: center;
+                    gap: 4px;
+                    padding: 5px 12px;
+                    border-radius: 13px;
+                    background: transparent;
                     border: none;
-                    background: rgba(0, 255, 255, 0.1);
-                    border-radius: 8px;
-                    color: rgba(0, 255, 255, 0.8);
+                    color: rgba(255, 255, 255, 0.7);
+                    font-family: 'Rajdhani', sans-serif;
+                    font-size: 12px;
+                    font-weight: 600;
                     cursor: pointer;
+                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                    white-space: nowrap;
+                    position: relative;
+                }
+
+                .vinyl-top-group-btn:hover {
+                    background: rgba(255, 0, 128, 0.2);
+                    color: #fff;
+                }
+
+                .vinyl-top-divider {
+                    width: 1px;
+                    height: 16px;
+                    background: linear-gradient(
+                        to bottom,
+                        transparent,
+                        rgba(255, 0, 128, 0.5),
+                        transparent
+                    );
+                    margin: 0 2px;
+                    font-size: 14px;
+                    color: rgba(255, 0, 128, 0.6);
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    transition: all 0.2s;
                 }
 
-                .vinyl-search-download-btn:hover {
-                    background: rgba(0, 255, 255, 0.2);
-                    color: #00ffff;
-                    transform: scale(1.1);
+                .vinyl-badge {
+                    background: rgba(255, 0, 128, 0.4);
+                    color: #fff;
+                    padding: 1px 6px;
+                    border-radius: 8px;
+                    font-size: 10px;
+                    font-weight: 700;
+                    margin-left: 3px;
+                    min-width: 16px;
+                    text-align: center;
                 }
 
-                .vinyl-search-download-btn:disabled {
+                /* 列表视图 */
+                .vinyl-list-view {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%);
+                    z-index: 100;
+                    display: flex;
+                    flex-direction: column;
+                    padding: 60px 20px 20px;
+                    overflow-y: auto;
+                }
+
+                .vinyl-list-header {
+                    display: flex;
+                    justify-content: center;
+                    margin-bottom: 20px;
+                }
+
+                .vinyl-play-all-btn {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    padding: 12px 24px;
+                    background: linear-gradient(135deg, rgba(255, 0, 128, 0.2), rgba(0, 255, 255, 0.2));
+                    border: 1px solid rgba(255, 0, 128, 0.5);
+                    border-radius: 25px;
+                    color: #fff;
+                    font-family: 'Rajdhani', sans-serif;
+                    font-size: 15px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                }
+
+                .vinyl-play-all-btn:hover:not(:disabled) {
+                    background: linear-gradient(135deg, rgba(255, 0, 128, 0.3), rgba(0, 255, 255, 0.3));
+                    box-shadow: 0 0 30px rgba(255, 0, 128, 0.4);
+                    transform: translateY(-2px);
+                }
+
+                .vinyl-play-all-btn:disabled {
                     opacity: 0.5;
                     cursor: not-allowed;
                 }
 
-                .vinyl-search-download-btn .animate-spin {
-                    animation: spin 1s linear infinite;
+                .vinyl-list-item {
+                    display: flex;
+                    align-items: center;
+                    padding: 12px;
+                    background: rgba(255, 255, 255, 0.03);
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    border-radius: 12px;
+                    margin-bottom: 8px;
+                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                 }
 
-                .vinyl-search-cover {
-                    width: 48px;
-                    height: 48px;
+                .vinyl-list-item:hover {
+                    background: rgba(255, 255, 255, 0.08);
+                    border-color: rgba(255, 255, 255, 0.1);
+                    transform: translateX(4px);
+                }
+
+                .vinyl-list-item-main {
+                    flex: 1;
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    cursor: pointer;
+                    min-width: 0;
+                }
+
+                .vinyl-list-cover {
+                    width: 50px;
+                    height: 50px;
                     border-radius: 8px;
                     object-fit: cover;
                     flex-shrink: 0;
-                    background: linear-gradient(135deg, #1a1a2e 0%, #0a0a0a 100%);
                 }
 
-                .vinyl-search-cover-placeholder {
-                    width: 48px;
-                    height: 48px;
+                .vinyl-list-cover-placeholder {
+                    width: 50px;
+                    height: 50px;
                     border-radius: 8px;
-                    background: linear-gradient(135deg, #1a1a2e 0%, #0a0a0a 100%);
+                    background: rgba(255, 0, 128, 0.1);
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    color: rgba(0, 255, 255, 0.3);
+                    color: rgba(255, 0, 128, 0.3);
                     flex-shrink: 0;
                 }
 
-                .vinyl-search-info {
+                .vinyl-list-info {
                     flex: 1;
                     min-width: 0;
-                    overflow: hidden;
                 }
 
-                .vinyl-search-title {
-                    font-family: 'Orbitron', monospace;
-                    font-size: 14px;
+                .vinyl-list-name {
+                    font-family: 'Rajdhani', sans-serif;
+                    font-size: 15px;
                     font-weight: 600;
-                    color: white;
+                    color: #fff;
                     margin-bottom: 4px;
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
                 }
 
-                .vinyl-search-artist {
+                .vinyl-list-artist {
                     font-family: 'Rajdhani', sans-serif;
                     font-size: 13px;
                     color: rgba(255, 255, 255, 0.5);
@@ -1753,37 +2155,56 @@ export function MusicPlayerWidget() {
                     white-space: nowrap;
                 }
 
-                .vinyl-search-loading-more {
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 12px;
-                    padding: 20px;
-                    color: rgba(0, 255, 255, 0.7);
+                .vinyl-list-meta {
                     font-family: 'Rajdhani', sans-serif;
-                    font-size: 14px;
-                    width: 100%;
+                    font-size: 11px;
+                    color: rgba(255, 255, 255, 0.3);
+                    margin-top: 2px;
+                }
+
+                .vinyl-list-actions {
+                    display: flex;
+                    gap: 8px;
                     flex-shrink: 0;
                 }
 
-                .vinyl-search-loading-more .vinyl-loading-spinner {
-                    width: 24px;
-                    height: 24px;
-                    border: 2px solid transparent;
-                    border-top-color: #00ffff;
-                    border-right-color: #ff0080;
+                .vinyl-list-actions button {
+                    width: 32px;
+                    height: 32px;
                     border-radius: 50%;
-                    animation: vinyl-loading-spin 1s linear infinite;
+                    background: rgba(255, 255, 255, 0.05);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    color: rgba(255, 255, 255, 0.6);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                 }
 
-                .vinyl-search-no-more {
+                .vinyl-list-actions button:hover {
+                    background: rgba(255, 255, 255, 0.1);
+                    border-color: rgba(255, 255, 255, 0.2);
+                    color: #fff;
+                }
+
+                .vinyl-list-actions button.liked {
+                    color: #ff0080;
+                    border-color: rgba(255, 0, 128, 0.3);
+                }
+
+                .vinyl-list-loading {
+                    display: flex;
+                    justify-content: center;
+                    padding: 20px;
+                }
+
+                .vinyl-list-end {
                     text-align: center;
                     padding: 16px;
                     color: rgba(255, 255, 255, 0.3);
                     font-family: 'Rajdhani', sans-serif;
                     font-size: 13px;
-                    width: 100%;
-                    flex-shrink: 0;
                 }
 
                 /* 旋转动画 */

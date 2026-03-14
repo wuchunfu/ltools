@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -484,13 +485,20 @@ func (s *ServiceLX) GetLyric(song Song) (string, error) {
 
 // 其他方法保持与原 Service 相同
 
-// GetLikeList 获取喜欢列表
+// GetLikeList 获取喜欢列表（向后兼容方法）
 func (s *ServiceLX) GetLikeList() ([]Song, error) {
 	likeList, err := s.configManager.GetLikeList()
 	if err != nil {
 		return nil, err
 	}
-	return likeList.Songs, nil
+
+	// 提取 Song（去除时间戳）
+	songs := make([]Song, len(likeList.Songs))
+	for i, item := range likeList.Songs {
+		songs[i] = item.Song
+	}
+
+	return songs, nil
 }
 
 // AddToLikes 添加到喜欢列表
@@ -500,13 +508,18 @@ func (s *ServiceLX) AddToLikes(song Song) error {
 		return err
 	}
 
-	for _, s := range likeList.Songs {
-		if s.ID == song.ID {
-			return nil
+	// 检查是否已存在
+	for _, item := range likeList.Songs {
+		if item.Song.ID == song.ID {
+			return nil // 已存在，跳过
 		}
 	}
 
-	likeList.Songs = append(likeList.Songs, song)
+	// 添加时记录时间戳
+	likeList.Songs = append(likeList.Songs, SongWithTimestamp{
+		Song:    song,
+		LikedAt: time.Now(),
+	})
 	likeList.UpdatedAt = time.Now()
 
 	return s.configManager.SaveLikeList(likeList)
@@ -519,10 +532,10 @@ func (s *ServiceLX) RemoveFromLikes(id string) error {
 		return err
 	}
 
-	newSongs := make([]Song, 0)
-	for _, song := range likeList.Songs {
-		if song.ID != id {
-			newSongs = append(newSongs, song)
+	newSongs := make([]SongWithTimestamp, 0)
+	for _, item := range likeList.Songs {
+		if item.Song.ID != id {
+			newSongs = append(newSongs, item)
 		}
 	}
 
@@ -530,6 +543,119 @@ func (s *ServiceLX) RemoveFromLikes(id string) error {
 	likeList.UpdatedAt = time.Now()
 
 	return s.configManager.SaveLikeList(likeList)
+}
+
+// GetLikeListPaginated 获取分页的喜欢列表（按时间倒序）
+func (s *ServiceLX) GetLikeListPaginated(page int, pageSize int) (*PaginatedLikeList, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20 // 默认每页 20 条，与搜索保持一致
+	}
+
+	likeList, err := s.configManager.GetLikeList()
+	if err != nil {
+		return nil, err
+	}
+
+	// 按 LikedAt 倒序排序
+	sort.Slice(likeList.Songs, func(i, j int) bool {
+		return likeList.Songs[i].LikedAt.After(likeList.Songs[j].LikedAt)
+	})
+
+	total := len(likeList.Songs)
+	start := (page - 1) * pageSize
+	end := start + pageSize
+
+	// 边界检查
+	if start >= total {
+		return &PaginatedLikeList{
+			Songs:   []SongWithTimestamp{},
+			Total:   total,
+			Page:    page,
+			HasMore: false,
+		}, nil
+	}
+
+	if end > total {
+		end = total
+	}
+
+	return &PaginatedLikeList{
+		Songs:   likeList.Songs[start:end],
+		Total:   total,
+		Page:    page,
+		HasMore: end < total,
+	}, nil
+}
+
+// GetHotSongs 获取热门歌曲（通过搜索热门关键字）
+func (s *ServiceLX) GetHotSongs(page int, pageSize int) (*PaginatedSongs, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+
+	// 预定义热门关键词（与 GetRandomSongs 类似）
+	hotKeywords := []string{
+		"热门", "流行", "抖音", "网红", "经典",
+		"新歌", "榜单", "推荐", "TOP", "金曲",
+		"华语", "粤语", "欧美", "韩语", "日语",
+	}
+
+	// 随机选择一个关键词
+	rand.Seed(time.Now().UnixNano())
+	keyword := hotKeywords[rand.Intn(len(hotKeywords))]
+
+	// 复用现有的搜索功能
+	songs, err := s.Search(keyword, page)
+	if err != nil {
+		return nil, err
+	}
+
+	// 注意：Search() 方法本身每次返回 20 条
+	// 如果 pageSize != 20，这里需要调整
+
+	return &PaginatedSongs{
+		Songs:   songs,
+		Total:   len(songs), // 热门歌曲总数未知，使用当前页数量
+		Page:    page,
+		HasMore: len(songs) >= pageSize, // 如果返回满页，假设还有更多
+	}, nil
+}
+
+// PlayLikeList 播放整个喜欢列表（返回歌曲数组）
+func (s *ServiceLX) PlayLikeList() ([]Song, error) {
+	likeList, err := s.configManager.GetLikeList()
+	if err != nil {
+		return nil, err
+	}
+
+	// 按 LikedAt 倒序排序
+	sort.Slice(likeList.Songs, func(i, j int) bool {
+		return likeList.Songs[i].LikedAt.After(likeList.Songs[j].LikedAt)
+	})
+
+	// 提取所有 Song（去除时间戳）
+	songs := make([]Song, len(likeList.Songs))
+	for i, item := range likeList.Songs {
+		songs[i] = item.Song
+	}
+
+	return songs, nil
+}
+
+// PlayHotSongs 播放热门歌曲（返回歌曲数组）
+func (s *ServiceLX) PlayHotSongs() ([]Song, error) {
+	// 获取 30-50 首热门歌曲
+	result, err := s.GetHotSongs(1, 50)
+	if err != nil {
+		return nil, err
+	}
+	return result.Songs, nil
 }
 
 // SetPlatform 切换平台

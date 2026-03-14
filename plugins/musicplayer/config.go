@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // ConfigManager 配置管理器
@@ -97,8 +98,63 @@ func (cm *ConfigManager) SetVolume(volume int) error {
 	return cm.saveConfig()
 }
 
+// MigrateLikeList 迁移旧格式的喜欢列表
+func (cm *ConfigManager) MigrateLikeList() error {
+	likesFile := filepath.Join(cm.configDir, "likes.json")
+
+	data, err := os.ReadFile(likesFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // 文件不存在，无需迁移
+		}
+		return err
+	}
+
+	// 尝试解析新格式
+	var newFormat LikeList
+	if err := json.Unmarshal(data, &newFormat); err == nil {
+		// 检查是否已经是新格式（通过检查第一个元素的 LikedAt）
+		if len(newFormat.Songs) > 0 && !newFormat.Songs[0].LikedAt.IsZero() {
+			return nil // 已经是新格式
+		}
+		// 如果是空列表,也算新格式
+		if len(newFormat.Songs) == 0 {
+			return nil
+		}
+	}
+
+	// 尝试解析为旧格式
+	var oldFormat struct {
+		Songs     []Song    `json:"songs"`
+		UpdatedAt time.Time `json:"updated_at"`
+	}
+	if err := json.Unmarshal(data, &oldFormat); err != nil {
+		return err
+	}
+
+	// 转换为新格式
+	now := time.Now()
+	newFormat = LikeList{
+		Songs:     make([]SongWithTimestamp, len(oldFormat.Songs)),
+		UpdatedAt: oldFormat.UpdatedAt,
+	}
+
+	for i, song := range oldFormat.Songs {
+		newFormat.Songs[i] = SongWithTimestamp{
+			Song:    song,
+			LikedAt: now, // 使用当前时间作为默认喜欢时间
+		}
+	}
+
+	// 保存新格式
+	return cm.SaveLikeList(&newFormat)
+}
+
 // GetLikeList 获取喜欢列表
 func (cm *ConfigManager) GetLikeList() (*LikeList, error) {
+	// 先尝试迁移旧格式数据
+	cm.MigrateLikeList()
+
 	likesFile := filepath.Join(cm.configDir, "likes.json")
 
 	data, err := os.ReadFile(likesFile)
@@ -106,7 +162,7 @@ func (cm *ConfigManager) GetLikeList() (*LikeList, error) {
 		// 文件不存在，返回空列表
 		if os.IsNotExist(err) {
 			return &LikeList{
-				Songs: []Song{},
+				Songs: []SongWithTimestamp{},
 			}, nil
 		}
 		return nil, err

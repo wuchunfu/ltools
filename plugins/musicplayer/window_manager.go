@@ -63,7 +63,7 @@ func (wm *WindowManager) ShowWindow() error {
 		Name:          "Music Player",
 		Title:         "音乐播放器",
 		Width:         420,
-		Height:        600,
+		Height:        640,
 		Frameless:     true,
 		AlwaysOnTop:   true,
 		DisableResize: true,

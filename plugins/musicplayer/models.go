@@ -32,10 +32,32 @@ type Config struct {
 	Volume   int    `json:"volume"`    // 音量 (0-100)
 }
 
+// SongWithTimestamp 带时间戳的歌曲结构
+type SongWithTimestamp struct {
+	Song     Song      `json:"song"`     // 歌曲信息
+	LikedAt  time.Time `json:"liked_at"` // 喜欢时间
+}
+
 // LikeList 喜欢列表
 type LikeList struct {
-	Songs     []Song    `json:"songs"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Songs     []SongWithTimestamp `json:"songs"`     // 带时间戳的歌曲列表
+	UpdatedAt time.Time           `json:"updated_at"` // 更新时间
+}
+
+// PaginatedLikeList 分页喜欢列表响应
+type PaginatedLikeList struct {
+	Songs   []SongWithTimestamp `json:"songs"`   // 歌曲列表
+	Total   int                 `json:"total"`   // 总数
+	Page    int                 `json:"page"`    // 当前页码
+	HasMore bool                `json:"has_more"` // 是否有更多
+}
+
+// PaginatedSongs 分页歌曲响应（用于热门歌曲）
+type PaginatedSongs struct {
+	Songs   []Song `json:"songs"`   // 歌曲列表
+	Total   int    `json:"total"`   // 总数
+	Page    int    `json:"page"`    // 当前页码
+	HasMore bool   `json:"has_more"` // 是否有更多
 }
 
 // Album 专辑信息
